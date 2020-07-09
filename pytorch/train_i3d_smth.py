@@ -55,10 +55,10 @@ if(not args.soft_max==None):
     hyper_params["soft_max"] = args.soft_max
 if(not args.last_relu==None):
     hyper_params["last_relu"] = args.last_relu
-
-
-hyper_params["mod_stride_layers"] = args.mod_stride_layers
-    
+if(not args.mod_stride_layers==None):
+    hyper_params["mod_stride_layers"] = args.mod_stride_layers
+else:
+    hyper_params["mod_stride_layers"] = "MaxPool3d_4a_3x3,Conv3d_1a_7x7"
 
 # set column model
 file_name = config['conv_model']

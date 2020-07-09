@@ -11,7 +11,7 @@ FLAGS = tf.app.flags.FLAGS
 
 
 def clstm_block(input_tensor, nb_hidden, ks1, ks2, pooling,
-                batch_normalization, return_sequences, is_training):
+                batch_normalization, return_sequences):
     """
     x: input tensor
     nb_hidden: int
@@ -19,7 +19,6 @@ def clstm_block(input_tensor, nb_hidden, ks1, ks2, pooling,
     pooling: str 'max'|'avg'
     batch_normalization: bool
     return_sequences: bool
-    is_training: bool
     """
     # Kernel regularizer
     reg = tf.keras.regularizers.l2(FLAGS.kernel_regularizer)
@@ -45,14 +44,12 @@ def clstm_block(input_tensor, nb_hidden, ks1, ks2, pooling,
     print(x)
     # Normalize according to batch statistics
     if batch_normalization:
-        # x = tf.layers.batch_normalization(inputs=x, training=is_training)
         x = tf.layers.batch_normalization(inputs=x)
-        # x = tf.keras.layers.BatchNormalization()(x)
         print(x)
     return x, clstm_output
 
     
-def clstm_gap(sequence, bn, is_training):
+def clstm_gap(sequence, bn):
 
     layers = ast.literal_eval(FLAGS.layers)
     rs = ast.literal_eval(FLAGS.return_sequences)
@@ -65,8 +62,7 @@ def clstm_gap(sequence, bn, is_training):
         with tf.name_scope(name_scope):
             x = clstm_block(x, nb_hidden=layers[l], ks=FLAGS.kernel_size,
                             pooling=True, batch_normalization=bn,
-                            return_sequences=rs[l], 
-                            is_training=is_training)
+                            return_sequences=rs[l])
 
 
     with tf.name_scope('gap'):
@@ -86,10 +82,9 @@ def clstm_gap(sequence, bn, is_training):
     return x
 
 
-def clstm(x, bn, is_training, num_classes):
+def clstm(x, bn, num_classes):
     """x: 5D tensor, sequence of images
        bn: bool, whether to batch normalize
-       is_training: bool, whether in training or inference
        return: x, the transformed input sequence."""
 
     layers = ast.literal_eval(FLAGS.layers)
@@ -105,8 +100,7 @@ def clstm(x, bn, is_training, num_classes):
                             ks1=FLAGS.kernel_size_1,
                             ks2=FLAGS.kernel_size_2,
                             pooling=FLAGS.pooling_method, batch_normalization=bn,
-                            return_sequences=rs[l], 
-                            is_training=is_training)
+                            return_sequences=rs[l])
             print('x: ', x)
             print('clstm_output: ', clstm_output)
 

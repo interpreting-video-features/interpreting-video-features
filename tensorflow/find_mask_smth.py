@@ -1,11 +1,9 @@
 import tensorflow as tf
-from sklearn.metrics import classification_report
 from skimage.transform import resize
 from keras.utils import np_utils
 from PIL import Image
 import pandas as pd
 import numpy as np
-import math
 import ast
 import cv2
 import os
@@ -574,11 +572,6 @@ def create_dataset(filepath):
     return dataset
 
 
-def get_top_k(array, k):
-    top_k = array.argsort()[-k:][::-1]
-    return top_k
-
-
 def create_image_arrays(input_sequence, gradcams, time_mask, output_folder, video_ID, mask_type):
 
     combined_images = []
@@ -660,70 +653,6 @@ def main(argv):
                              elems=frame_inds,
                              initializer=original_input_var[:,0,:,:,:])
         perturb_op = tf.reshape(perturb_op, seq_shape)
-        # if FLAGS.temporal_mask_type == 'reverse':
-        #     mask_on_inds_bool = tf.greater(mask_clip, tf.constant(0.5))
-        #     mask_on_inds = tf.where(mask_on_inds_bool)
-        #     mask_on_inds = tf.squeeze(mask_on_inds)
-        #     import pdb; pdb.set_trace()
-
-        #     # Get the change indices, hope that change_inds can be a normal list.
-        #     last = mask_clip[0]
-        #     start_inds = []
-        #     end_inds = []
-        #     in_submask = tf.get_variable('in_submask', dtype=tf.bool)
-        #     for i in range(FLAGS.seq_length):
-        #         if mask_clip[i] is not None:
-        #             if i == 0:
-        #             # Add the index if it is on from the beginning.
-        #                 start_index = tf.cond(tf.equal(mask_clip[i],tf.constant(1, dtype=tf.float32)),
-        #                                        lambda: i, lambda: -1)
-        #                 # If startindex is -1, we have NOT started, else yes we have.
-        #                 started_bool = tf.cond(tf.equal(start_index, -1), lambda: False, lambda: True)
-        #                 assign_in_submask = in_submask.assign(started_bool)
-        #                 with tf.control_dependencies([assign_in_submask]):
-        #                     in_submask = tf.identity(in_submask)
-        #                 
-        #             else:
-        #                 start_index = tf.cond(tf.math.greater((mask_clip[i]-last), tf.constant(0, dtype=tf.float32)),
-        #                                        lambda: i, lambda: -1)
-        #                 change_index = tf.cond(tf.equal(mask_clip[i], last),
-        #                                        lambda: -1,  # true_fn
-        #                                        lambda: i)   # Only return i if they are not equal.
-        #                 # Only append if (1-0) aka for an ON submask.
-        #             change_inds.append(change_index)
-        #     pdb.set_trace()
-        #     change_inds_tensor = tf.stack(change_inds)
-
-        #     # Use the change indices to get the right slices and reverse them.
-        #     perturb_op = original_input_var
-        #     prev = tf.get_variable('prev', shape=[], inititalizer=tf.zeros_initializer())
-        #     prev_assign = prev.assign()
-        #     build_pert_seq = []
-
-        #     
-        #     def actually_perturb(reversed_slice, prev, ci):
-        #         with tf.control_dependencies([perturb_op[prev:ci].assign(reversed_slice)]):
-        #             perturb_op = tf.identity(perturb_op)
-
-        #     for ci in change_inds:
-        #         if ci is not None:
-        #             tmp_slice = original_input_var[:,prev:ci,:,:,:]
-        #             tmp_slice = tf.reverse(tmp_slice, axis=[1])
-
-        #             perturb_op = tf.cond(tf.equal(ci, tf.constant(-1)),
-        #                                  lambda: tf.identity(perturb_op),
-        #                                  lambda: actually_perturb(tmp_slice, prev, ci))
-        #         pdb.set_trace()
-        #         # prev = ci
-        #         prev.assign(ci)
-        #         
-        #     # reverse_seq = tf.reverse(original_input_var, axis=[1])
-        #     # perturb_op = tf.map_fn(lambda e: tf.cond(e,
-        #     #                                          lambda: reverse_seq[:,e,:,:,:],
-        #     #                                          lambda: original_input_var[:,e,:,:,:]),
-        #     #                                  mask_on_inds)
-        #     # perturb_op = tf.reshape(perturb_op, seq_shape)
-        #     # perturb_op = tf.cast(perturb_op, tf.float32)
 
 
     y = tf.placeholder(tf.float32, [FLAGS.batch_size, NUM_CLASSES])

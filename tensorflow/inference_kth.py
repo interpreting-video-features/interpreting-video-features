@@ -4,7 +4,7 @@ from keras.utils import np_utils
 from PIL import Image
 import pandas as pd
 import numpy as np
-import clstm
+from models import clstm
 import ast
 import cv2
 import os

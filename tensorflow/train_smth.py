@@ -7,9 +7,7 @@ import time
 import ast
 import os
 
-import cnn_3d
-import clstm
-import i3d
+from models import clstm, cnn_3d, i3d
 
 experiment = Experiment(api_key="xAURnaQRjUuVQO68jQZEUEDgj",
     project_name="general",
@@ -20,11 +18,6 @@ FLAGS = tf.app.flags.FLAGS
 tf.app.flags.DEFINE_integer('nb_epochs',
     200,
     """Number of epochs to train.""")
-tf.app.flags.DEFINE_string('layers',
-    '[32,32,32]',
-    """Number of hidden units per CLSTM-layer, given as a list.
-       For example [64,32,16]. The number of layers will be implicit
-       from len(list).""")
 tf.app.flags.DEFINE_string('return_sequences',
     '[True,True,True]',
     """Whether to return the full sequence or only the

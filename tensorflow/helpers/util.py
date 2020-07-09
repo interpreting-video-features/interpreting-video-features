@@ -6,3 +6,7 @@ def process_image(image_path):
     return img_to_array(img).astype(np.float32)
 
 
+def get_top_k(array, k):
+    top_k = array.argsort()[-k:][::-1]
+    return top_k
+

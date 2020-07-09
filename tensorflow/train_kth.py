@@ -8,9 +8,7 @@ import time
 import ast
 import os
 
-import cnn_3d
-import clstm
-import i3d
+from models import clstm, cnn_3d, i3d
 
 experiment = Experiment(api_key="xAURnaQRjUuVQO68jQZEUEDgj",
                         project_name="kth-actions", workspace="sofiabroome")

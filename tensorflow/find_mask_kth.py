@@ -1,13 +1,11 @@
 import tensorflow as tf
-from keras.preprocessing.image import load_img, img_to_array
-from sklearn.metrics import classification_report
 from skimage.transform import resize
 from keras.utils import np_utils
+from models import clstm
+from helpers import util
 from PIL import Image
 import pandas as pd
 import numpy as np
-import clstm
-import math
 import ast
 import cv2
 import os
@@ -205,15 +203,10 @@ def get_paths_for_sequence(subject, video_id):
 def read_images_and_return_list(paths):
     list_to_return = []
     for p in paths:
-        img = process_image(p, (FLAGS.image_height, FLAGS.image_width, 3))                                                                                                                                                                   
+        img = util.process_image(p, (FLAGS.image_height, FLAGS.image_width, 3))                                                                                                                                                                   
         img = img.reshape((1, 1, FLAGS.image_height, FLAGS.image_width, 3))
         list_to_return.append(img)
     return list_to_return
-
-
-def process_image(image_path, target_shape):
-    img = load_img(image_path, target_size=target_shape)
-    return img_to_array(img).astype(np.float32)
 
 
 def data_for_one_sequence_5D(paths, label):
@@ -630,11 +623,6 @@ def create_dataset(filepath):
     return dataset
 
 
-def get_top_k(array, k):
-    top_k = array.argsort()[-k:][::-1]
-    return top_k
-
-
 def create_image_arrays(input_sequence, gradcams, time_mask,
                         output_folder, video_ID, mask_type):
 
@@ -658,7 +646,6 @@ def create_image_arrays(input_sequence, gradcams, time_mask,
                                  "img%02d.jpg" % (i + 1)),
                                  combined_img)
 
-    # combined_images = np.transpose(np.array(combined_images), (3,0,1,2))
     visualize_results_on_gradcam(combined_images,
                                  time_mask,
                                  root_dir=output_folder,

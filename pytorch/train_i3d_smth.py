@@ -228,7 +228,6 @@ def main():
     for epoch in range(start_epoch, num_epochs):
 
         lrs = [params['lr'] for params in optimizer.param_groups]
-        experiment.log_metric("learning_rate",lrs, step=epoch)
         print(" > Current LR(s) -- {}".format(lrs))
         if np.max(lr) < last_lr and last_lr > 0:
             print(" > Training is DONE by learning rate {}".format(last_lr))
@@ -306,10 +305,6 @@ def train(train_loader, model, criterion, optimizer, epoch):
         top1.update(prec1.item(), input.size(0))
         top5.update(prec5.item(), input.size(0))
 
-        experiment.log_metric("loss",loss.item(), step=i+epoch*len(train_loader))
-        experiment.log_metric("prec1",prec1.item(), step=i+epoch*len(train_loader))
-        experiment.log_metric("prec5",prec1.item(), step=i+epoch*len(train_loader))
-        
         # compute gradient and do SGD step
         optimizer.zero_grad()
         loss.backward()
@@ -376,9 +371,6 @@ def validate(val_loader, model, criterion, class_to_idx=None):
             top1.update(prec1.item(), input.size(0))
             top5.update(prec5.item(), input.size(0))
 
-            experiment.log_metric("val_loss",losses.avg)
-            experiment.log_metric("val_prec1",top1.avg)
-            experiment.log_metric("val_prec5",top5.avg)
             # measure elapsed time
             batch_time.update(time.time() - end)
             end = time.time()

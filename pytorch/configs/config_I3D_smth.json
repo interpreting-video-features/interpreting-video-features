@@ -1,7 +1,6 @@
 {
-    "model_name": "modelI3d_kinetic_smth_3",
+    "model_name": "modelI3d_scratch",
     "output_dir": "trained_models/",
-    "pretrained_model_path": "trained_models/I3D_kinetic/rgb_imagenet.pt",
     "input_mode": "jpg",
 
     "data_folder": "/smth_smth/data/smth_smth_orig/20bn-something-something-v2/",

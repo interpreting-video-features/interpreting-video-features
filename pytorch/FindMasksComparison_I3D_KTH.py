@@ -22,9 +22,8 @@ import pandas as pd
 
 from PIL import Image
 
-
 # Insert path to the grad cam viz repo https://github.com/jacobgil/pytorch-grad-cam
-path_to_grad_cam_repo = "pytorch-grad-cam/"
+path_to_grad_cam_repo = "../pytorch-grad-cam/"
 if not os.path.exists(path_to_grad_cam_repo):
     raise ValueError("Path to Grad-CAM repo not found. Please correct the path.")
     
@@ -93,12 +92,9 @@ if(not args.splitType==None):
 if(not args.gradCamType==None):
     hyper_params["gradCamType"] = args.gradCamType
 else:
-    hyper_params["gradCamType"]="correct"
+    hyper_params["gradCamType"]="guessed"
     
 print("batch size", hyper_params["batch_size"])
-
-#experiment.log_multiple_params(hyper_params)
-
 
 def main():
     with autograd.detect_anomaly():
@@ -115,57 +111,32 @@ def main():
         print(" > Using {} processes for data loader.".format(
             hyper_params["num_workers"]))
 
-        if( hyper_params["splitType"]=='original'):
-            train_data = KTHImLoader("/smth_smth/kthData/labeled/train", clip_size=hyper_params["clip_size"])
-            train_loader = torch.utils.data.DataLoader(
-                    train_data,
-                    batch_size=hyper_params['batch_size'], shuffle=hyper_params["shuffle"],
-                    num_workers=hyper_params['num_workers'], pin_memory=True,
-                    drop_last=True)
 
-            val_data = KTHImLoader("/smth_smth/kthData/labeled/test", clip_size=hyper_params["clip_size"], get_item_id=True)
-            val_loader = torch.utils.data.DataLoader(
-                    val_data,
-                    batch_size=hyper_params['batch_size'], shuffle=hyper_params["shuffle"],
-                    num_workers=hyper_params['num_workers'], pin_memory=True,
-                    drop_last=True)
+        train_data = KTHImLoader("/kthData/train", clip_size=hyper_params["clip_size"])
+        train_loader = torch.utils.data.DataLoader(
+                train_data,
+                batch_size=hyper_params['batch_size'], shuffle=hyper_params["shuffle"],
+                num_workers=hyper_params['num_workers'], pin_memory=True,
+                drop_last=True)
 
-            test_data = KTHImLoader("/smth_smth/kthData/labeled/test", clip_size=hyper_params["clip_size"])
-            test_loader = torch.utils.data.DataLoader(
-                    test_data,
-                    batch_size=hyper_params['batch_size'], shuffle=False,
-                    num_workers=hyper_params['num_workers'], pin_memory=True,
-                    drop_last=True)
-        else:
-            train_data = KTHImLoader("/smth_smth/kthDataNewSplit/train", clip_size=hyper_params["clip_size"])
-            train_loader = torch.utils.data.DataLoader(
-                    train_data,
-                    batch_size=hyper_params['batch_size'], shuffle=hyper_params["shuffle"],
-                    num_workers=hyper_params['num_workers'], pin_memory=True,
-                    drop_last=True)
+        val_data = KTHImLoader("/kthData/test", clip_size=hyper_params["clip_size"], get_item_id=True)
+        val_loader = torch.utils.data.DataLoader(
+                val_data,
+                batch_size=hyper_params['batch_size'], shuffle=hyper_params["shuffle"],
+                num_workers=hyper_params['num_workers'], pin_memory=True,
+                drop_last=True)
 
-            val_data = KTHImLoader("/smth_smth/kthDataNewSplit/test", clip_size=hyper_params["clip_size"], get_item_id=True)
-            val_loader = torch.utils.data.DataLoader(
-                    val_data,
-                    batch_size=hyper_params['batch_size'], shuffle=hyper_params["shuffle"],
-                    num_workers=hyper_params['num_workers'], pin_memory=True,
-                    drop_last=True)
+        test_data = KTHImLoader("/kthData/test", clip_size=hyper_params["clip_size"])
+        test_loader = torch.utils.data.DataLoader(
+                test_data,
+                batch_size=hyper_params['batch_size'], shuffle=False,
+                num_workers=hyper_params['num_workers'], pin_memory=True,
+                drop_last=True)
 
-            test_data = KTHImLoader("/smth_smth/kthDataNewSplit/test", clip_size=hyper_params["clip_size"])
-            test_loader = torch.utils.data.DataLoader(
-                    test_data,
-                    batch_size=hyper_params['batch_size'], shuffle=False,
-                    num_workers=hyper_params['num_workers'], pin_memory=True,
-                    drop_last=True)
-
-        # optionally resume from a checkpoint
-        if( hyper_params["splitType"]=='original'):
-            checkpoint_path="/smth_smth/smth-smth-v2-baseline-with-models/trained_models/modelI3d_kinetic_smth_3i3d_kth32StartAndMid_wd5e5_dr07/model_best.pth.tar"
-        else:
-            checkpoint_path="/smth_smth/smth-smth-v2-baseline-with-models/trained_models/modelI3d_kinetic_smth_3i3d_kth32NewSplit_startMid_wd5e5_dr07/checkpoint.pth.tar"
+        # load model from a checkpoint
+        checkpoint_path=args.checkpoint
 
         if os.path.isfile(checkpoint_path):
-            #TODO: put back to 'resume' and bring back start epoch maybe
             print(" > Loading checkpoint '{}'".format(checkpoint_path))
 
             checkpoint = torch.load(checkpoint_path)
@@ -184,11 +155,11 @@ def main():
         if(args.lam1!=None):
             lam1=args.lam1
         else:
-            lam1 = 0.0006
+            lam1 = 0.02
         if(args.lam2!=None):
             lam2=args.lam2
         else:
-            lam2 = 0.0004
+            lam2 = 0.04
         
         #optIter= how many gradient descent steps to take in finding mask
         if(args.optIter!=None):
@@ -196,16 +167,12 @@ def main():
         else:
             N = 100
         
-        #optRuns = how many times to find the mask (not REALLY necessary to have >1 unless using "random" mode)
-        if(args.optRuns!=None):
-            ita=args.optRuns
-        else:
-            ita = 1
 
-        find_masks(val_loader,model,hyper_params,lam1, lam2, N, ita, "central", hyper_params["maskPerturbType"], classOI="smth_class_clips_short.csv", doGradCam=True, runTempMask=True)
+        ita = 1
+
+        find_masks(val_loader,model,hyper_params,lam1, lam2, N, ita, "central", hyper_params["maskPerturbType"], classOI=None, doGradCam=True, runTempMask=True)
 
 def perturbSequence(seq, mask, perbType='freeze', snapValues=False):
-
     if(snapValues):
         for j in range(len(mask)):
             if(mask[j]>0.5):
@@ -214,23 +181,13 @@ def perturbSequence(seq, mask, perbType='freeze', snapValues=False):
                 mask[j]=0
     if (perbType=='freeze'):
         #pytorch expects Batch,Channel, T, H, W
-        perbInput = torch.zeros_like(seq)# seq.clone().detach()
-        #TODO: also double check that the mask here is not a copy but by ref so the grad holds 
+        perbInput = torch.zeros_like(seq)
         for u in range(len(mask)):
             
             if(u==0):
                 perbInput[:,:,u,:,:]=seq[:,:,u,:,:]
-            if(u!=0): #mask[u]>=0.5 and u!=0
-                #print("max value before norm: ",((1-mask[u])*seq[:,:,u,:,:] + mask[u]*seq[:,:,u-1,:,:]).max())
-                #print("min value before norm: ",((1-mask[u])*seq[:,:,u,:,:] + mask[u]*seq[:,:,u-1,:,:]).min())
-                #perbInput[:,:,u,:,:]=(((1-mask[u])*seq[:,:,u,:,:] + mask[u]*seq[:,:,u-1,:,:])/((1-mask[u])*seq[:,:,u,:,:] + mask[u]*seq[:,:,u-1,:,:]).max())*255
-                #perbInput[:,:,u,:,:]=(((1-mask[u])*seq[:,:,u,:,:] + mask[u]*perbInput.clone()[:,:,u-1,:,:])/((1-mask[u])*seq[:,:,u,:,:] + mask[u]*perbInput.clone()[:,:,u-1,:,:]).max())*255
+            if(u!=0): 
                 perbInput[:,:,u,:,:]=(1-mask[u])*seq[:,:,u,:,:] + mask[u]*perbInput.clone()[:,:,u-1,:,:]
-                #print("max value after norm: ", perbInput[:,:,u,:,:].max())
-                #print("min value after norm: ", perbInput[:,:,u,:,:].min())
-            
-            #print("made it to u ", u)
-            #perbInput[:,:,u,:,:] = freezeFrame(seq,mask,u)
             
     if (perbType=='reverse'):
         #pytorch expects Batch,Channel, T, H, W
@@ -248,15 +205,13 @@ def perturbSequence(seq, mask, perbType='freeze', snapValues=False):
             perbInput[:,:,y,:,:]=seq[:,:,y,:,:]
                 
         for maskOnInds in subMasks:
-            #print("center should be, ", maskOnInds[(len(maskOnInds)//2)])
+            
             #leave unmasked parts alone (as well as reverse middle point)
             if ((len(maskOnInds)//2 < len(maskOnInds)/2) and y==maskOnInds[(len(maskOnInds)//2)]):
                 #print("hit center at ", y)
                 perbInput[:,:,y,:,:]=seq[:,:,y,:,:]
-            #print("secondary clauyse:", (len(maskOnInds)//2 < len(maskOnInds)/2) and y==maskOnInds[(len(maskOnInds)//2)])
+            
             for u in range(int(len(maskOnInds)//2)):
-                #print("swapping", maskOnInds[u], " with ", maskOnInds[-(u+1)])
-                #print("meaning: ", mask[maskOnInds[u]]*seq[:,:,maskOnInds[u],:,:], "with ", seq[:,:,maskOnInds[-(u+1)],:,:])
                 temp = seq[:,:,maskOnInds[u],:,:].clone()
                 perbInput[:,:,maskOnInds[u],:,:]=(1-mask[maskOnInds[u]])*seq[:,:,maskOnInds[u],:,:] + mask[maskOnInds[u]]*seq[:,:,maskOnInds[-(u+1)],:,:]
                 perbInput[:,:,maskOnInds[-(u+1)],:,:]=(1-mask[maskOnInds[u]])*seq[:,:,maskOnInds[-(u+1)],:,:] + mask[maskOnInds[u]]*temp    
@@ -368,72 +323,12 @@ def initMask(seq,model,intraBidx,target,thresh=0.9, mode="central", maskPertType
     mask.requires_grad_()
     print("initial mask is: ", mask)
     return mask
-      
-def findMaskCombinatorial(seq,model,intraBidx,target,lam1,lam2, maskPertType='freeze', allowSplit=False, maxMaskSize=None):
-
-    derp = 0
-    if(allowSplit):
-        return findMaskCombinatorialSplit(seq,model,intraBidx,target,lam1,lam2)
- 
-    if(maxMaskSize==None):
-        maxMaskLen = range(1,seq.shape[2])
-    else:
-        maxMaskLen = range(1,maxMaskSize+1)
-    bestMask = torch.zeros(seq.shape[2]).to(device)
-    bestLoss= model(perturbSequence(seq,bestMask,perbType=maskPertType))[intraBidx,target[intraBidx]]
-
-    sm = torch.nn.Softmax(dim=1)
-    for m_size in maxMaskLen:
-        for m_start in range((seq.shape[2]-m_size)+1):
-            derp += 1
-            
-            if(derp%25==0):
-                print("combi run ", derp)
-            mask = torch.zeros(seq.shape[2]).to(device)
-            mask[m_start:m_start+m_size]=1
-            #curr_loss=sm(model(perturbSequence(seq,mask)))[intraBidx,target[intraBidx]]
-            curr_loss=model(perturbSequence(seq,mask,perbType=maskPertType))[intraBidx,target[intraBidx]]
-            l1loss = lam1*torch.sum(torch.abs(mask))
-            tvnormLoss= lam2*calc_TVNorm(mask,p=3,q=3)
-            curr_loss+=l1loss
-            curr_loss+=tvnormLoss
-
-            if(curr_loss<bestLoss):
-                bestLoss=curr_loss
-                bestMask=mask
-    print("combinatorial mask is: ", bestMask)
-    return bestMask
-
-def findMaskCombinatorialSplit(seq,model,intraBidx,target,lam1,lam2, maskPertType='freeze'):
-
-    bestMask = torch.zeros(seq.shape[2]).to(device)
-    bestLoss= model(perturbSequence(seq,bestMask,perbType=maskPertType))[intraBidx,target[intraBidx]]
-    #print("current loss is: ", bestLoss)
-    sm = torch.nn.Softmax(dim=1)
-    for m_size in range(1,5):
-        for m_start in range(seq.shape[2]-m_size):            
-            for m2_start in range(seq.shape[2]-m_size):
-                mask = torch.zeros(seq.shape[2]).to(device)
-                mask[m_start:m_start+m_size]=1
-                mask[m2_start:m2_start+m_size]=1
-
-                curr_loss=model(perturbSequence(seq,mask,perbType=maskPertType))[intraBidx,target[intraBidx]]
-                l1loss = lam1*torch.sum(torch.abs(mask))
-                tvnormLoss= lam2*calc_TVNorm(mask,p=3,q=3)
-                curr_loss+=l1loss
-                curr_loss+=tvnormLoss
-
-                if(curr_loss<bestLoss):
-                    bestLoss=curr_loss
-                    bestMask=mask
-    print("combinatorial mask is: ", bestMask)
-    return bestMask
+     
 
 def vizualize_results(orig_seq, pert_seq, mask, rootDir=None,case="0",markImgs=True, iterTest=False):
     if(rootDir==None):
-        #rootDir="/smth_smth/smth-smth-v2-baseline-with-models/trained_models/model3D_224_scratch_FIRSTREALISEN1/"
-        rootDir="/smth_smth/smth-smth-v2-baseline-with-models/trained_models/modelI3d_kinetic_smth_3FIRSTREALISENPRETRAINSHUF1/"+args.subDir+"/"
-    #if(iterTest):
+        rootDir="vizualisations/"+args.subDir+"/"
+
     rootDir+="/PerturbImgs/"
         
     if not os.path.exists(rootDir):
@@ -514,18 +409,6 @@ def findTempMaskRedDots(imageWidth,imageHeight,mask,roundUpMask):
         
     return dots
     
-
-def graphMasks(masks,case="0"):
-    
-    #Saves a graph of the mask values over the sequence (handy for quickly looking at the mask)
-   
-    plt.figure()
-    for i in range(len(masks)):
-        plt.plot(masks[i],label=str(i))
-    plt.legend()
-    plt.savefig("/smth_smth/smth-smth-v2-baseline-with-models/trained_models/modelI3d_kinetic_smth_3FIRSTREALISENPRETRAINSHUF1/"+args.subDir+"/iterTest/graphs_case"+case+".png")
-
-    
 def createImageArrays(input_sequence, gradcamMask,timeMask,intraBidx,temporalMaskType,output_folder,targTag,RESIZE_FLAG,RESIZE_SIZE_WIDTH,RESIZE_SIZE_HEIGHT):
     
     input_to_model = input_sequence[intraBidx][None,:,:,:,:]
@@ -583,6 +466,11 @@ def find_masks(dat_loader, model,hyper_params,lam1, lam2, N, ita, maskType="grad
     '''
     model.eval()
     masks = []
+    resultsPath = "results/"
+    clipsTimeMaskResults= []
+    clipsGradCamResults = []
+    if not os.path.exists(resultsPath):
+        os.makedirs(resultsPath)
     
     if(hyper_params["splitType"]=="original"):
         clips_of_interest = [["person17","boxing","d1","_1"],
@@ -642,25 +530,17 @@ def find_masks(dat_loader, model,hyper_params,lam1, lam2, N, ita, maskType="grad
         if(i%50==0):
             print("on idx: ", i)
 
-
         input_var = input.to(device)
-
-
         target = target.to(device)
 
         model.zero_grad()
-
-        # compute output for model
-        
-      
+  
         #eta is for breaking out of the grad desc early if it hasn't improved
         eta = 0.00001
         
-        #yes technically we could remove this loop and have bs=1 but pytorch doesn't like that
         haveOutput=False
         for intraBidx in range(hyper_params["batch_size"]):
-        
-            
+  
             targTag = label[intraBidx]
             tagFound = False
             
@@ -668,12 +548,8 @@ def find_masks(dat_loader, model,hyper_params,lam1, lam2, N, ita, maskType="grad
                 if all([coit in targTag for coit in coi]):
                     tagFound = True
             
-            
             if(tagFound):
-                print("found clip of interest, ", targTag)
-                #Start mask optimization, should be
-                #Loss = lam1*||Mask size|| + lam2*Beta loss + class_score
-                
+          
                 if not haveOutput:
                     output = model(input_var)
                     haveOutput=True
@@ -685,66 +561,66 @@ def find_masks(dat_loader, model,hyper_params,lam1, lam2, N, ita, maskType="grad
                         
                     else:
                         maskTarget=target
-                #combinatorial mask finding is straight forward, needs no grad desc
-                    if(maskType=="combi"):
-                        timeMask = findMaskCombinatorial(input_var,model,intraBidx,maskTarget, lam1,lam2, maskPertType=temporalMaskType,maxMaskSize=maxMaskLength)
-                    elif(maskType=="combis"):
-                        timeMask = findMaskCombinatorial(input_var,model,intraBidx,maskTarget, lam1,lam2, maskPertType=temporalMaskType, maxMaskSize=maxMaskLength, allowSplit=True)
 
-                    #graident descent type
-                    else:
-                        model.zero_grad()
-                        timeMask = initMask(input_var,model,intraBidx,maskTarget,thresh=0.9,mode="central", maskPertType=temporalMaskType)
-                        optimizer = torch.optim.Adam([timeMask], lr=0.2)
-                        oldLoss = 999999
-                        for nidx in range(N):
+                    #gradient descent for finding temporal masks
+                    model.zero_grad()
+                    timeMask = initMask(input_var,model,intraBidx,maskTarget,thresh=0.9,mode="central", maskPertType=temporalMaskType)
+                    optimizer = torch.optim.Adam([timeMask], lr=0.2)
+                    oldLoss = 999999
+                    for nidx in range(N):
 
-                            if(nidx%25==0):
-                                print("on nidx: ", nidx)
-                            #TODO: fix the input_var[0] thing
-                            mask_clip = torch.sigmoid(timeMask)
-                            l1loss = lam1*torch.sum(torch.abs(mask_clip))
-                            tvnormLoss= lam2*calc_TVNorm(mask_clip,p=3,q=3)
+                        if(nidx%25==0):
+                            print("on nidx: ", nidx)
 
+                        mask_clip = torch.sigmoid(timeMask)
+                        l1loss = lam1*torch.sum(torch.abs(mask_clip))
+                        tvnormLoss= lam2*calc_TVNorm(mask_clip,p=3,q=3)
 
-                            #sm = torch.nn.Softmax(dim=1)
-                            classLoss = model(perturbSequence(input_var,mask_clip, perbType=temporalMaskType))
-                            #classLoss = sm(classLoss)
-                            classLoss = classLoss[intraBidx,maskTarget[intraBidx]]
+                        classLoss = model(perturbSequence(input_var,mask_clip, perbType=temporalMaskType))
 
-                            loss = l1loss + tvnormLoss + classLoss
-
-                            if(abs(oldLoss-loss)<eta):
-                                break;
-
-                            print("l1loss: ", l1loss)
-                            print("tvnormloss: ", tvnormLoss)
-                            print("classloss: ", classLoss)
-                            print("mask_clipped is: ", mask_clip)
-                            optimizer.zero_grad()
-                            loss.backward()
-                            optimizer.step()
-
-                        timeMask = torch.sigmoid(timeMask)
-                        scoreSavePath=os.path.join("cam_saved_images",args.subDir,str(target[intraBidx].item()),\
-                                                  label[intraBidx]+"g_"+str(torch.argmax(output[intraBidx]).item())\
-                                                   +"_gs%5.4f"%torch.max(output[intraBidx]).item()\
-                                                   +"_cs%5.4f"%output[intraBidx][target[intraBidx]].item(), "combined")
-                        
-                        if not os.path.exists(scoreSavePath):
-                            os.makedirs(scoreSavePath)
-                        
-                        f = open(scoreSavePath+"/ClassScoreFreezecase"+label[intraBidx]+".txt","w+")
-                        f.write(str(classLoss.item()))
-                        f.close()
-                        
-                        classLoss = model(perturbSequence(input_var,timeMask, perbType="reverse"))
-                            #classLoss = sm(classLoss)
                         classLoss = classLoss[intraBidx,maskTarget[intraBidx]]
-                        
-                        f = open(scoreSavePath+"/ClassScoreReversecase"+label[intraBidx]+".txt","w+")
-                        f.write(str(classLoss.item()))
-                        f.close()
+
+                        loss = l1loss + tvnormLoss + classLoss
+
+                        if(abs(oldLoss-loss)<eta):
+                            break;
+
+                        optimizer.zero_grad()
+                        loss.backward()
+                        optimizer.step()
+
+                    timeMask = torch.sigmoid(timeMask)
+                    scoreSavePath=os.path.join("cam_saved_images",args.subDir,str(target[intraBidx].item()),\
+                                              label[intraBidx]+"g_"+str(torch.argmax(output[intraBidx]).item())\
+                                               +"_gs%5.4f"%torch.max(output[intraBidx]).item()\
+                                               +"_cs%5.4f"%output[intraBidx][target[intraBidx]].item(), "combined")
+
+                    if not os.path.exists(scoreSavePath):
+                        os.makedirs(scoreSavePath)
+
+                    f = open(scoreSavePath+"/ClassScoreFreezecase"+label[intraBidx]+".txt","w+")
+                    f.write(str(classLoss.item()))
+                    f.close()
+
+                    classLossFreeze = model(perturbSequence(input_var,timeMask, perbType="reverse"))
+                        #classLoss = sm(classLoss)
+                    classLossFreeze = classLossFreeze[intraBidx,maskTarget[intraBidx]]
+
+                    f = open(scoreSavePath+"/ClassScoreReversecase"+label[intraBidx]+".txt","w+")
+                    f.write(str(classLossFreeze.item()))
+                    f.close()
+
+                    #as soon as you have the time mask, and freeze/reverse scores,
+                    #Add results for current clip in list of timemask results
+                    clipsTimeMaskResults.append({'true_class' : int(target[intraBidx].item()),
+                                          'pred_class' : int(torch.argmax(output[intraBidx]).item()),
+                                          'video_id' : label[intraBidx],
+                                          'time_mask' : timeMask.detach().cpu().numpy(),
+                                          'original_score_guess' : torch.max(output[intraBidx]).item(),
+                                          'original_score_true' : output[intraBidx][target[intraBidx]].item(),
+                                          'freeze_score' : classLoss.item(),
+                                          'reverse_score' : classLossFreeze.item()
+                                         })
 
                     if(verbose):
                         print("resulting mask is: ", timeMask)
@@ -769,6 +645,13 @@ def find_masks(dat_loader, model,hyper_params,lam1, lam2, N, ita, maskType="grad
                         target_index=torch.argmax(output[intraBidx])
                         
                     mask, output_grad = grad_cam(input_to_model, target_index)
+
+                    #as soon as you have the numpy array of gradcam heatmap, add it to list of GCheatmaps
+                    clipsGradCamResults.append({'true_class' : int(target[intraBidx].item()),
+                                          'pred_class' : int(torch.argmax(output[intraBidx]).item()),
+                                          'video_id' : label[intraBidx],
+                                          'GCHeatMap' : mask
+                                         })
 
 
                     '''beginning of gradcam write to disk'''
@@ -797,9 +680,20 @@ def find_masks(dat_loader, model,hyper_params,lam1, lam2, N, ita, maskType="grad
                 
                 if(runTempMask):
                     vizualize_results(input_var[intraBidx], perturbSequence(input_var,timeMask, perbType=temporalMaskType)[intraBidx], timeMask, rootDir=output_images_folder_cam_combined,case=targTag,markImgs=True, iterTest=False)
-                #graphMasks(resMasks,case=str(i*hyper_params["batch_size"]+intraBidx))
+
     
                     masks.append(timeMask)
+        
+        #finally, write pickle files to disk
+
+    f = open(resultsPath+"I3d_KTH_allTimeMaskResults_original_"+args.subDir+".p","wb")
+    pickle.dump(clipsTimeMaskResults, f)
+    f.close()
+    
+    f = open(resultsPath+"I3d_KTH_allGradCamResults_original_"+args.subDir+".p","wb")
+    pickle.dump(clipsGradCamResults, f)
+    f.close()    
+    
     return masks
 
 

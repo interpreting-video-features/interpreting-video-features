@@ -3,15 +3,16 @@ from skimage.transform import resize
 from keras.utils import np_utils
 from models import clstm
 from helpers import util
-from PIL import Image
+import gradcam as gc
 import pandas as pd
 import numpy as np
+import mask
+import viz
 import ast
 import cv2
 import os
 
 NUM_CLASSES = 6
-MASK_THRESHOLD = 0.1
 PATH_TO_FRAMES = None
 
 
@@ -221,351 +222,6 @@ def data_for_one_sequence_5D(paths, label):
     return batch_img, batch_label
 
 
-def get_gradcam_blend(img, cam, cam_max):
-    """
-    img: np.ndarray
-    cam: np.ndarray
-    cam_max: float
-    return: Image object"""
-    cam = cam / cam_max # scale 0 to 1.0
-    cam = resize(cam, (FLAGS.image_height, FLAGS.image_width), preserve_range=True)
-
-    cam_heatmap = cv2.applyColorMap(np.uint8(255*cam), cv2.COLORMAP_JET)
-    # cam_heatmap = cv2.cvtColor(cam_heatmap, cv2.COLOR_BGR2RGB)
-    bg = Image.fromarray((255*img).astype('uint8'))
-    overlay = Image.fromarray(cam_heatmap.astype('uint8'))
-    blend = Image.blend(bg, overlay, 0.4)
-
-    return blend
-
-
-def get_cam_after_relu(img, conv_output, conv_grad):
-    weights = np.mean(conv_grad, axis = (0, 1)) # alpha_k, [512]
-    cam = np.zeros(conv_output.shape[0 : 2], dtype = np.float32) # [7,7]
-
-    # Taking a weighted average
-    for i, w in enumerate(weights):
-        cam += w * conv_output[:, :, i]
-
-    # Passing through ReLU
-    cam = np.maximum(cam, 0)
-    return cam
-
-
-def get_gradcam(sess, prediction, last_clstm_output,
-                y, original_input_var, mask_var, frame_inds,
-                sequence, label, target_index):
-    
-    prob = tf.keras.layers.Activation('softmax')(prediction)
-
-    # Things needed for gradcam
-    cost = (-1) * tf.reduce_sum(tf.multiply(y, tf.log(prob)), axis=1)
-    
-    # Elementwise multiplication between y and prediction, then reduce to scalar
-    if target_index == np.argmax(label):
-        y_c = tf.reduce_sum(tf.multiply(prediction, y), axis=1)
-    else:
-        # y_guessed = tf.one_hot(target_index, depth=1)
-        y_guessed = tf.one_hot(tf.argmax(prob), depth=1)
-        y_c = tf.reduce_sum(tf.multiply(prediction, y_guessed), axis=1)
-
-    target_conv_layer = last_clstm_output
-
-    # Compute gradients of class output wrt target conv layer
-    target_conv_layer_grad = tf.gradients(y_c, target_conv_layer)[0]
-    
-    # Obtain values for conv and grad tensors
-    target_conv_layer_value, \
-    target_conv_layer_grad_value = sess.run([target_conv_layer,
-                                             target_conv_layer_grad],
-                                             feed_dict={original_input_var: sequence,
-                                                        y: label,
-                                                        mask_var: np.zeros((FLAGS.seq_length)),
-                                                        frame_inds: range(FLAGS.seq_length)})
-    assert (target_conv_layer_grad_value.shape[1] == FLAGS.seq_length)
-
-    # Get CAMs (class activation mappings) for all clips
-    # and save max for normalization across clip.
-    cam_max = 0
-    gradcams = []
-    for i in range(FLAGS.seq_length):
-        frame = sequence[0,i,:]
-        grad = target_conv_layer_grad_value[0,i,:]
-        conv_output = target_conv_layer_value[0,i,:]
-        # Prepare frame for gradcam
-        img = frame.astype(float)
-        img -= np.min(img)
-        img /= img.max()
-        cam = get_cam_after_relu(img,
-                                 conv_output=conv_output,
-                                 conv_grad=grad)
-        gradcams.append(cam)
-        if np.max(cam) > cam_max:
-            cam_max = np.max(cam)
-    gradcam_masks = [] 
-    # Loop over frames again to blend them with the gradcams and save.
-    for i in range(FLAGS.seq_length):
-        frame = sequence[0,i,:]
-        # Prepare frame for gradcam
-        img = frame.astype(float)
-        img -= np.min(img)
-        img /= img.max()
-    
-        # NORMALIZE PER FRAME
-        if FLAGS.normalization_mode == 'frame':
-            gradcam_blend = get_gradcam_blend(img, gradcams[i], np.max(gradcams[i]))
-        # NORMALIZE PER SEQUENCE 
-        elif FLAGS.normalization_mode == 'sequence':
-            gradcam_blend = get_gradcam_blend(img, gradcams[i], cam_max)
-        else:
-            print('Error. Need to provide normalization mode.')
-        gradcam_masks.append(gradcam_blend)
-    return gradcam_masks
-
-
-def perturb_sequence(seq, mask, perb_type='freeze', snap_values=False):
-
-    if(snap_values):
-        for j in range(len(mask)):
-            if(mask[j]>0.5):
-                mask[j]=1
-            else:
-                mask[j]=0
-
-    if (perb_type == 'freeze'):
-        perbInput = np.zeros(seq.shape)
-        for u in range(len(mask)):
-            
-            if(u==0):  # Set first frame to same as seq.
-                perbInput[:,u,:,:,:] = seq[:,u,:,:,:]
-
-            if(u!=0): #mask[u]>=0.5 and u!=0
-                perbInput[:,u,:,:,:] = (1-mask[u])*seq[:,u,:,:,:] + \
-                                        mask[u]*np.copy(perbInput)[:,u-1,:,:,:]
-            
-    if (perb_type == 'reverse'):
-        #pytorch expects Batch,Channel, T, H, W
-        perbInput = np.zeros(seq.shape)# seq.clone().detach()
-        maskOnInds = np.where(mask>MASK_THRESHOLD)[0]  # np.where returns a tuple for some reason
-        # if(len(maskOnInds)>0):
-        #     maskOnInds = maskOnInds.squeeze(dim=1)
-        maskOnInds = maskOnInds.tolist()
-        
-        subMasks = findSubMasksFromMask(mask)
-        
-        for y in range(len(mask)):
-            perbInput[:,y,:,:,:]=seq[:,y,:,:,:]
-                
-        for maskOnInds in subMasks:
-            #print("center should be, ", maskOnInds[(len(maskOnInds)//2)])
-            #leave unmasked parts alone (as well as reverse middle point)
-            if ((len(maskOnInds)//2 < len(maskOnInds)/2) and y==maskOnInds[(len(maskOnInds)//2)]):
-                #print("hit center at ", y)
-                perbInput[:,y,:,:,:]=seq[:,y,:,:,:]
-            for u in range(int(len(maskOnInds)//2)):
-                temp = seq[:,maskOnInds[u],:,:,:]
-                perbInput[:,maskOnInds[u],:,:,:] = (1-mask[maskOnInds[u]])*seq[:,maskOnInds[u],:,:,:] + mask[maskOnInds[u]]*seq[:,maskOnInds[-(u+1)],:,:,:]
-                perbInput[:,maskOnInds[-(u+1)],:,:,:] = (1-mask[maskOnInds[u]])*seq[:,maskOnInds[-(u+1)],:,:,:] + mask[maskOnInds[u]]*temp    
-    #print("return type of pertb: ", perbInput.type())
-    return perbInput
-
-
-def findSubMasksFromMask(mask, thresh=MASK_THRESHOLD):
-    subMasks = []
-    currentSubMask = []
-    currentlyInMask = False
-    for j in range(len(mask)):
-        #if we find a value above threshold but is first occurence, start appending to current submask
-        if(mask[j]>thresh and not currentlyInMask):
-            currentSubMask = []
-            currentlyInMask=True
-            currentSubMask.append(j)
-        #if it's not current occurence, just keep appending
-        elif(mask[j]>thresh and currentlyInMask):
-            currentSubMask.append(j)
-        #if below thresh, stop appending
-        elif((mask[j]<=thresh and currentlyInMask)):
-            subMasks.append(currentSubMask)
-            currentlyInMask=False
-            
-        if(j==len(mask)-1 and currentlyInMask):
-            subMasks.append(currentSubMask)
-            currentlyInMask=False
-    #print("submasks found: ", subMasks)
-    return subMasks
-
-
-def init_mask(seq, mask_var, original_input_var, frame_inds, after_softmax, sess, target,
-             thresh=0.9, mode="central", mask_pert_type='freeze'):
-    '''
-    Initiaizes the first value of the mask where the gradient descent methods for finding
-    the masks starts. Central finds the smallest centered mask which still reduces the class score by 
-    at least 90% compared to a fully perturbing mask (whole mask on). Random just turns (on average) 70% of the 
-    mask (Does not give very conclusive results so far). 
-    '''
-    if(mode=="central"):
-        
-        #first define the fully perturbed sequence
-        fullPert = np.zeros(seq.shape)
-        for i in range(seq.shape[1]):
-            fullPert[:,i,:,:,:] = seq[:,0,:,:,:]
-        
-        #get the class score for the fully perturbed sequence
-        full_pert_score = sess.run(after_softmax, feed_dict={mask_var: np.ones((FLAGS.seq_length)),
-                                 original_input_var: seq,
-                                 frame_inds: range(FLAGS.seq_length)})
-        full_pert_score = full_pert_score[:,np.argmax(target)]
-        
-        orig_score = sess.run(after_softmax, feed_dict={mask_var: np.zeros((FLAGS.seq_length)),
-                                 original_input_var: seq,
-                                 frame_inds: range(FLAGS.seq_length)})
-        orig_score = orig_score[:,np.argmax(target)]
-            
-        #reduce mask size while the loss ratio remains above 90%
-        for i in range(1, seq.shape[1]//2):
-            new_mask = np.ones(seq.shape[1])
-            new_mask[:i]=0
-            new_mask[-i:]=0
-
-            central_score = sess.run(after_softmax, feed_dict={mask_var: new_mask,
-                                     original_input_var: seq,
-                                     frame_inds: range(FLAGS.seq_length)})
-            central_score = central_score[:,np.argmax(target)]
-
-            score_ratio=(orig_score-central_score)/(orig_score-full_pert_score)
-            
-            if(score_ratio < thresh):
-                break
-            
-        mask=new_mask
-
-        #modify the mask so that it is roughly 0 or 1 after sigmoid
-        for j in range(len(mask)):
-            if(mask[j]==0):
-                mask[j]=-5
-            elif(mask[j]==1):
-                mask[j]=5
-    
-    elif(mode=="random"):
-        #random init to 0 or 1, then modify for sigmoid
-        mask = torch.cuda.FloatTensor(16).uniform_() > 0.7
-        mask = mask.float()
-        mask = mask - 0.5
-        mask = mask*5
-        
-        #if mask were to be ALL 0's or 1's, perturb one a bit so that TV norm doesn't NaN
-        if(torch.abs(mask.sum())==2.5*len(mask)):
-            mask[8]+=0.1
-
-    print("initial mask is: ", mask)
-    return mask
-
-      
-def calc_TVNorm(mask, p=3, q=3):
-    '''
-    Calculates the Total Variational Norm by summing the differences of the values
-    in between the different positions in the mask.
-    p=3 and q=3 are defaults from the paper.
-    '''
-    val = 0
-    for u in range(1, FLAGS.seq_length-1):
-
-        val += tf.abs(mask[u-1]-mask[u])**p
-        val += tf.abs(mask[u+1]-mask[u])**p
-    val = val**(1/p)
-    val = val**q
-
-    return val
-
-
-def visualize_results_on_gradcam(gradcam_images, mask, root_dir,
-                                 case="0", round_up_mask=True):
-        
-    #print("gradCamType: ", gradcam_images.type)
-    try:
-        mask=mask.detach().cpu()
-    except:
-        print("mask was already on cpu")
-    if not os.path.exists(root_dir):
-        os.makedirs(root_dir)
-    
-    dots = find_temp_mask_red_dots(FLAGS.image_width, FLAGS.image_height, mask, round_up_mask)
-    
-    dot_offset = FLAGS.image_width*2
-    for i in range(len(mask)):
-        for j,dot in enumerate(dots):
-
-            if(i==j):
-                intensity=255
-            else:
-                intensity=150
-
-            gradcam_images[i][dot["y_start"]:,dot_offset+dot["x_start"]:dot_offset+dot["x_end"],:] = 0
-            gradcam_images[i][dot["y_start"]:,dot_offset+dot["x_start"]:dot_offset+dot["x_end"],dot["channel"]] = intensity
-
-            # result = Image.fromarray(gradcam_images[i].astype(np.uint8), mode="RGB")
-            tmp = cv2.cvtColor(gradcam_images[i], cv2.COLOR_BGR2RGB)
-            result = Image.fromarray(tmp.astype(np.uint8))
-            result.save(root_dir+"/case"+case+"_"+str(i)+".png")
-
-    f = open(root_dir+"/MASKVALScase"+case+".txt","w+")
-    f.write(str(mask))
-    f.close()
-
-
-def find_temp_mask_red_dots(image_width, image_height, mask, round_up_mask):
-    mask_len = len(mask)
-    dot_width = int(image_width//(mask_len+4))
-    dot_padding = int((image_width - (dot_width*mask_len))//mask_len)
-    dot_height = int(image_height//20)
-    dots = []
-    
-    for i,m in enumerate(mask):
-        
-        if(round_up_mask):
-            if(mask[i]>0.5):
-                mask[i]=1
-            else:
-                mask[i]=0
-                
-        dot={'y_start': -dot_height,
-             'y_end' : image_height,
-             'x_start' : i*(dot_width+dot_padding),
-             'x_end' : i*(dot_width+dot_padding)+dot_width}
-        if(mask[i]==0):
-            dot['channel']=1  # Green
-        else:
-            dot['channel']=2  # in BGR.
-            
-        dots.append(dot)
-        
-    return dots
-    
-
-def visualize_results(orig_seq, pert_seq, mask, root_dir=None,
-                      case="0", mark_imgs=True, iter_test=False):
-    if(root_dir==None):
-        root_dir= '/workspace/projects/spatiotemporal-interpretability/tensorflow/' + \
-                  FLAGS.output_folder + "/"
-    root_dir+="/PerturbImgs/"
-        
-    if not os.path.exists(root_dir):
-        os.makedirs(root_dir)
-    
-    for i in range(orig_seq.shape[1]):
-
-        if(mark_imgs):
-            orig_seq[:, i, :10, :10, 1:]=0
-            orig_seq[:, i, :10, :10, 0]=mask[i]*255
-            pert_seq[:, i, :10, :10, 1:]=0
-            pert_seq[:, i, :10, :10, 0]=mask[i]*255
-        result = Image.fromarray(pert_seq[0,i,:,:,:].astype(np.uint8))
-        result.save(root_dir+"case"+case+"pert"+str(i)+".png")
-    f = open(root_dir+"case"+case+".txt","w+")
-    f.write(str(mask))
-    f.close()
-
-
 def parse_fn(proto):
 
     # Define the tfrecord again. The sequence was saved as a string.
@@ -623,38 +279,6 @@ def create_dataset(filepath):
     return dataset
 
 
-def create_image_arrays(input_sequence, gradcams, time_mask,
-                        output_folder, video_ID, mask_type):
-
-    combined_images = []
-    for i in range(FLAGS.seq_length):
-        input_data_img = input_sequence[0, i, :, :, :]
-
-        time_mask_copy = time_mask.copy()
-
-        combined_img = np.concatenate((np.uint8(input_data_img),
-                                      np.uint8(gradcams[i]),
-                                      np.uint8(perturb_sequence(
-                                             input_sequence,
-                                             time_mask_copy,
-                                             perb_type=mask_type,
-                                             snap_values=True)[0,i,:,:,:])),
-                                      axis=1)
-
-        combined_images.append(combined_img)
-        cv2.imwrite(os.path.join(output_folder,
-                                 "img%02d.jpg" % (i + 1)),
-                                 combined_img)
-
-    visualize_results_on_gradcam(combined_images,
-                                 time_mask,
-                                 root_dir=output_folder,
-                                 case=mask_type+video_ID)
-    
-                    
-    return combined_images
-
-                    
 def main(argv):
 
     df = pd.read_csv(FLAGS.clip_selection)  # DataFrame containing the clips to run on.
@@ -798,7 +422,7 @@ def main(argv):
                 
                 if(run_temp_mask):
                     if (maskType == 'gradient'):
-                        start_mask = init_mask(input_var, mask_var, original_input_var,
+                        start_mask = mask.init_mask(input_var, mask_var, original_input_var,
                                               frame_inds, after_softmax, sess,
                                               label, thresh=0.9,
                                               mode="central", mask_pert_type=FLAGS.temporal_mask_type)
@@ -851,7 +475,7 @@ def main(argv):
 
                         if FLAGS.temporal_mask_type == 'reverse':
 
-                            perturbed_sequence = perturb_sequence(input_var, time_mask, perb_type='reverse')
+                            perturbed_sequence = mask.perturb_sequence(input_var, time_mask, perb_type='reverse')
                             
                             class_loss_rev = sess.run(class_loss, feed_dict={mask_var: np.zeros((FLAGS.seq_length)),
                                                                              original_input_var: perturbed_sequence,
@@ -871,7 +495,7 @@ def main(argv):
                         target_index=np.argmax(label)
 
                     gradcam = get_gradcam(sess, logits, clstm_3, y, original_input_var, mask_var, frame_inds,
-                                          input_var, label, target_index)
+                                          input_var, label, target_index, FLAGS.image_height, FLAGS.image_weight)
 
                     '''beginning of gradcam write to disk'''
                     
@@ -879,17 +503,19 @@ def main(argv):
                     os.makedirs(save_path, exist_ok=True)
                     
                 if(do_gradcam and run_temp_mask):
-                    create_image_arrays(input_var, gradcam, time_mask,
-                                        save_path, video_ID, 'freeze')
+                    viz.create_image_arrays(input_var, gradcam, time_mask,
+                                        save_path, video_ID, 'freeze',
+                                        FLAGS.image_width, FLAGS.image_height)
 
                     if FLAGS.temporal_mask_type == 'reverse':
                         # Also create the image arrays for the reverse operation.
-                        create_image_arrays(input_var, gradcam, time_mask,
-                                            save_path, video_ID, 'reverse')
+                        viz.create_image_arrays(input_var, gradcam, time_mask,
+                                            save_path, video_ID, 'reverse',
+                                            FLAGS.image_width, FLAGS.image_height)
                 
                 if(run_temp_mask):
-                    visualize_results(input_var,
-                                      perturb_sequence(input_var,
+                    viz.visualize_results(input_var,
+                                      mask.perturb_sequence(input_var,
                                                       time_mask, perb_type='reverse'),
                                       time_mask,
                                       root_dir=save_path,

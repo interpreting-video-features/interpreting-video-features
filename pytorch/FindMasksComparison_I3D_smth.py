@@ -269,8 +269,8 @@ def initMask(seq,model,intraBidx,target,thresh=0.9, mode="central", maskPertType
     '''
     Initiaizes the first value of the mask where the gradient descent methods for finding
     the masks starts. Central finds the smallest centered mask which still reduces the class score by 
-    at least 90% compared to a fully perturbing mask (whole mask on). Random just turns (on average) 70% of the 
-    mask (Does not give very conclusive results so far). 
+    at least 90% compared to a fully perturbing mask (whole mask on). Random turns (on average) 70% of the 
+    mask. 
     '''
     if(mode=="central"):
         

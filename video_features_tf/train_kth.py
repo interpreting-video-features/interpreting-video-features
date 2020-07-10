@@ -1,4 +1,3 @@
-from comet_ml import Experiment
 import tensorflow as tf
 import pandas as pd
 import numpy as np
@@ -7,9 +6,6 @@ import ast
 import os
 
 from models import clstm, cnn_3d, i3d
-
-experiment = Experiment(api_key="xAURnaQRjUuVQO68jQZEUEDgj",
-                        project_name="kth-actions", workspace="sofiabroome")
 
 FLAGS = tf.app.flags.FLAGS
 
@@ -152,8 +148,6 @@ params = {'STEPS_VAL': STEPS_VAL,
           'FLAGS.model': FLAGS.model,
           'FLAGS.learning_rate_start': FLAGS.learning_rate_start,
           'FLAGS.learning_rate_end': FLAGS.learning_rate_end}
-
-experiment.log_parameters(params)
 
 
 def i3d_model(rgb_input, is_training):
@@ -324,9 +318,6 @@ def main(argv):
         # Initialize all variables and start training.
         tf.global_variables_initializer().run(session=sess)
     
-        # Log model graph
-        experiment.set_model_graph(sess.graph)
-    
         ckpt_path = model_dir + FLAGS.checkpoint_name
 
         # Check if checkpoint exists for this model, restore if so.
@@ -390,8 +381,6 @@ def main(argv):
                                                       y: label,
                                                       is_training: True,
                                                       learning_rate: lr})
-                        experiment.log_metric("accuracy", acc, step=step)
-                        experiment.log_metric("loss", train_loss, step=step)
                     else:
                         sess.run(training_op, feed_dict={x: sequence,
                                                          y: label,
@@ -423,21 +412,16 @@ def main(argv):
                                                         learning_rate: lr})
                 val_losses.append(val_loss)
                 val_accs.append(val_acc)
-                experiment.log_metric("val. acc.", val_acc)
-                experiment.log_metric("val. loss.", val_loss)
-                experiment.log_metric("learning rate", lr)
 
             end_val = time.time()
             time_val = end_val - start_val
             print('Time taken for validation inference: {:0.2f} s\n'.format(time_val))
             val_losses = np.asarray(val_losses)
             mean_val_loss = np.mean(val_losses)
-            experiment.log_metric("mean val. loss.", mean_val_loss)
             print('Average validation loss: {:0.6f}'.format(mean_val_loss))
 
             val_accs = np.asarray(val_accs)
             mean_val_acc = np.mean(val_accs)
-            experiment.log_metric("mean val. acc.", mean_val_acc)
             print('Average validation acc: {:0.6f}'.format(mean_val_acc))
     
             if (mean_val_acc - best_val_acc) < 0.0001:

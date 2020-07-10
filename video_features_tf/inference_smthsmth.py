@@ -2,7 +2,8 @@ import tensorflow as tf
 import numpy as np
 import os
 
-import video_features_tf.models as models
+from models import clstm
+
 
 CLIP_LENGTH = 16
 NUM_CLASSES = 174
@@ -34,14 +35,31 @@ tf.app.flags.DEFINE_integer('nb_val_samples',
 tf.app.flags.DEFINE_integer('nb_hidden',
     32,
     """Number of hidden units in a CLSTM-layer.""")
+tf.app.flags.DEFINE_string('return_sequences',
+    '[True,True,True]',
+    """Whether to return the full sequence or only the
+       last element at every hidden layer for CLSTM.""")
+tf.app.flags.DEFINE_string('only_last_element_for_fc',
+    'no',
+    """Whether to give only the last element from the last CLSTM
+        layer to the FC layer, even if return_sequences=True for that layer.""")
 tf.app.flags.DEFINE_string('layers',
     '[32,32,32]',
     """Number of hidden units per CLSTM-layer, given as a list.
        For example [64,32,16]. The number of layers will be implicit
        from len(list).""")
+tf.app.flags.DEFINE_string('pooling_method',
+    'max',
+    """avg|max""")
 tf.app.flags.DEFINE_integer('seq_length',
     16,
     """Number of frames per sequence.""")
+tf.app.flags.DEFINE_integer('kernel_size_1',
+    5,
+    """First size of 2D convolutional kernel in clstm-unit.""")
+tf.app.flags.DEFINE_integer('kernel_size_2',
+    5,
+    """Second size of 2D convolutional kernel in clstm-unit.""")
 tf.app.flags.DEFINE_integer('image_size',
     224,
     """Square image size.""")
@@ -193,7 +211,7 @@ x = tf.placeholder(tf.float32, [None,
                                 FLAGS.image_size,
                                 3])
 y = tf.placeholder(tf.float32, [None, NUM_CLASSES])
-prediction, clstm_3 = models.clstm(x, bn=True, num_classes=NUM_CLASSES)
+prediction, clstm_3 = clstm.clstm(x, bn=True, num_classes=NUM_CLASSES)
 loss = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits_v2(
     logits=prediction, labels=y))
 optimizer = tf.train.AdadeltaOptimizer(learning_rate=lr)

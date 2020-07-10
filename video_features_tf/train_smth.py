@@ -5,7 +5,7 @@ import numpy as np
 import time
 import os
 
-from models import clstm, cnn_3d, i3d
+from models import clstm, cnn_3d
 
 experiment = Experiment(api_key="xAURnaQRjUuVQO68jQZEUEDgj",
     project_name="general",
@@ -20,6 +20,11 @@ tf.app.flags.DEFINE_string('return_sequences',
     '[True,True,True]',
     """Whether to return the full sequence or only the
        last element at every hidden layer for CLSTM.""")
+tf.app.flags.DEFINE_string('layers',
+    '[32,32,32]',
+    """Number of hidden units per CLSTM-layer, given as a list.
+       For example [64,32,16]. The number of layers will be implicit
+       from len(list).""")
 tf.app.flags.DEFINE_string('only_last_element_for_fc',
     'no',
     """Whether to give only the last element from the last CLSTM
@@ -76,10 +81,10 @@ tf.app.flags.DEFINE_string('shuffle_data',
     'yes',
     """Whether to shuffle the training data. See SHUFFLE_BUFFER param.""")
 tf.app.flags.DEFINE_string('train_data',
-    '/data/tfrecords/train.tfrecords',
+    '/local_storage/datasets/20bn-something-something-v2/train.tfrecords',
     """Path to training data, in .tfrecords format.""")
 tf.app.flags.DEFINE_string('val_data',
-    '/data/tfrecords/validation.tfrecords',
+    '/local_storage/datasets/20bn-something-something-v2/validation.tfrecords',
     """Path to validation data, in .tfrecords format.""")
 tf.app.flags.DEFINE_string('checkpoint_name',
     'model.ckpt',
@@ -126,14 +131,6 @@ params = {'STEPS_VAL': STEPS_VAL,
           'FLAGS.learning_rate_end:': FLAGS.learning_rate_end}
 
 experiment.log_parameters(params)
-
-
-def i3d_model(rgb_input, is_training):
-    rgb_model = i3d.InceptionI3d(
-        NUM_CLASSES, spatial_squeeze=True, final_endpoint='Logits')
-    rgb_logits, _ = rgb_model(
-        rgb_input, is_training=is_training, dropout_keep_prob=(1-FLAGS.dropout_rate))
-    return rgb_logits
 
 
 def parse_fn(proto):
@@ -198,25 +195,18 @@ def main(argv):
     learning_rate = tf.placeholder(tf.float32, [])
     x = tf.placeholder(tf.float32, [None, FLAGS.seq_length, FLAGS.image_size, FLAGS.image_size, 3])
     y = tf.placeholder(tf.int32, [None, NUM_CLASSES])
-    is_training = tf.placeholder(tf.bool, (), 'is_training')
 
     if FLAGS.model == 'cnn_3d':    
-        prediction = cnn_3d.cnn_3d(x, is_training)
+        prediction = cnn_3d.cnn_3d(x)
     if FLAGS.model == 'clstm':    
         prediction, _ = clstm.clstm(x, bn=False,
-                                    is_training=is_training,
                                     num_classes=NUM_CLASSES)
     if FLAGS.model == 'clstm_bn':    
         prediction, _ = clstm.clstm(x, bn=True,
-                                    is_training=is_training,
                                     num_classes=NUM_CLASSES)
     if FLAGS.model == 'clstm_gap':    
         prediction = clstm.clstm_gap(x, bn=False,
-                                     is_training=is_training,
                                      num_classes=NUM_CLASSES)
-    if FLAGS.model == 'i3d':    
-        prediction = i3d_model(x, is_training=is_training)
-
     loss = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits_v2(
         logits=prediction, labels=y))
     
@@ -301,32 +291,6 @@ def main(argv):
             # Get the global step reached by the already trained model.
             step = tf.train.global_step(sess, global_step)
             start_ep = int(step/STEPS_TRAIN)
-        elif FLAGS.model == 'i3d':
-            print('Restoring I3D checkpoint...')
-            rgb_variable_map = {}
-            for variable in tf.global_variables():
-                print(variable)
-                # Exclude logit layer since we are finetuning on a new set of classes.
-                if not variable.name.startswith('inception_i3d/Logits'):
-                    # Variables need to be renamed to match with the checkpoint.
-                    rgb_variable_map['RGB/'+ variable.name.replace(':0','')] = variable
-            del rgb_variable_map['RGB/global_step']
-            if FLAGS.optimizer == 'adam':
-                del rgb_variable_map['RGB/beta1_power']
-                del rgb_variable_map['RGB/beta2_power']
-                elts_to_delete = []
-                for k in rgb_variable_map.keys():
-                    if 'Adam' in k:
-                        print(k)
-                        elts_to_delete.append(k)
-                for elt in elts_to_delete:
-                    del rgb_variable_map[elt]
-                
-            # Add ops to save and restore for the chosen variables.
-            saver = tf.train.Saver(var_list=rgb_variable_map, reshape=True)
-            saver.restore(sess, 'checkpoints/rgb_imagenet/model.ckpt')
-            # saver.restore(sess, 'checkpoints/rgb_scratch/model.ckpt')
-            start_ep = 0
         else:
             print('Training a new model from scratch...')
             start_ep = 0
@@ -351,14 +315,12 @@ def main(argv):
                         _, acc, train_loss = sess.run([training_op, accuracy, loss],
                                            feed_dict={x: sequence,
                                                       y: label,
-                                                      is_training: True,
                                                       learning_rate: lr})
                         experiment.log_metric("accuracy", acc, step=step)
                         experiment.log_metric("loss", train_loss, step=step)
                     else:
                         sess.run(training_op, feed_dict={x: sequence,
                                                          y: label,
-                                                         is_training: True,
                                                          learning_rate: lr})
                     e = time.time()
                     t = e - s
@@ -382,7 +344,6 @@ def main(argv):
                 val_acc, val_loss = sess.run([accuracy, loss],
                                              feed_dict={x: sequence,
                                                         y: label,
-                                                        is_training: False,
                                                         learning_rate: lr})
                 val_losses.append(val_loss)
                 val_accs.append(val_acc)

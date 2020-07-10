@@ -112,21 +112,21 @@ def main():
             hyper_params["num_workers"]))
 
 
-        train_data = KTHImLoader("/kthData/train", clip_size=hyper_params["clip_size"])
+        train_data = KTHImLoader(args.dataDir +"/train", clip_size=hyper_params["clip_size"])
         train_loader = torch.utils.data.DataLoader(
                 train_data,
                 batch_size=hyper_params['batch_size'], shuffle=hyper_params["shuffle"],
                 num_workers=hyper_params['num_workers'], pin_memory=True,
                 drop_last=True)
 
-        val_data = KTHImLoader("/kthData/test", clip_size=hyper_params["clip_size"], get_item_id=True)
+        val_data = KTHImLoader(args.dataDir + "/test", clip_size=hyper_params["clip_size"], get_item_id=True)
         val_loader = torch.utils.data.DataLoader(
                 val_data,
                 batch_size=hyper_params['batch_size'], shuffle=hyper_params["shuffle"],
                 num_workers=hyper_params['num_workers'], pin_memory=True,
                 drop_last=True)
 
-        test_data = KTHImLoader("/kthData/test", clip_size=hyper_params["clip_size"])
+        test_data = KTHImLoader(args.dataDir +"/test", clip_size=hyper_params["clip_size"])
         test_loader = torch.utils.data.DataLoader(
                 test_data,
                 batch_size=hyper_params['batch_size'], shuffle=False,

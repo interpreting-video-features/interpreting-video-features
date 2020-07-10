@@ -36,7 +36,8 @@ hyper_params = {
     "num_classes": config["num_classes"],
     "shuffle":1,
     "soft_max":0,
-    "last_relu":None
+    "last_relu":None,
+    hyper_params["last_stride"]:1
 }
 
 if(not args.batch_size==None):

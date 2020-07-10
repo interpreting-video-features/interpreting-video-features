@@ -1,17 +1,9 @@
 {
     "model_name": "clstm_v4_",
     "output_dir": "trained_models/",
-    "pretrained_model_path": "trained_models/clstm_v4_CLSTMFIXEDSM_WITHGRADFIX_5_32_SGD_mom02_dr0.5_lr001_wd0e4/model_best.pth.tar",
     "input_mode": "jpg",
 
-    "data_folder": "/smth_smth/data/smth_smth_orig/20bn-something-something-v2/",
-
-    "json_data_train": "/smth_smth/data/smth_smth_orig/train.json",
-    "json_data_val": "/smth_smth/data/smth_smth_orig/validation.json",
-    "json_data_test": "/smth_smth/data/smth_smth_orig/test.json",
-
-    "json_file_labels": "/smth_smth/data/smth_smth_orig/labels.json",
-
+    "data_folder": "/kth_actions/data/",
     "num_workers": 2,
 
     "num_classes": 174,
@@ -36,7 +28,7 @@
     "print_freq": 4,
 
     "conv_model": "models.CLSTM_4",
-    "input_spatial_size": 224,
+    "input_spatial_size": 160,
 
     "column_units": 512,
     "save_features": true

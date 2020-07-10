@@ -69,7 +69,8 @@ hyper_params = {
     "input_spatial_size": config["input_spatial_size"],
     "column_units": config["column_units"],
     "num_classes": config["num_classes"],
-    "shuffle":1
+    "shuffle":1,
+    "last_stride":1
 }
 
 #some things are just easier to give via cmdline than changing conf all the time

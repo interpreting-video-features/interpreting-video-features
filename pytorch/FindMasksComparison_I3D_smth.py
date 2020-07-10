@@ -310,7 +310,7 @@ def initMask(seq,model,intraBidx,target,thresh=0.9, mode="central", maskPertType
     
     elif(mode=="random"):
         #random init to 0 or 1, then modify for sigmoid
-        mask = torch.cuda.FloatTensor(16).uniform_() > 0.7
+        mask = torch.cuda.FloatTensor(seq.shape[2]).uniform_() > 0.7
         mask = mask.float()
         mask = mask - 0.5
         mask = mask*5

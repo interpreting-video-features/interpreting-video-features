@@ -36,6 +36,8 @@ def load_args():
                         help="use batch_norm or not")
     parser.add_argument('--subDir', '-sd', type=str,
                     help="subdirectory to save figs to")
+    parser.add_argument('--dataDir', '-dd', type=str,
+                    help="directory containing input data")
     parser.add_argument('--checkpoint', '-chp', type=str,
                     help="checkpoint to read model from")
     parser.add_argument('--train', '-tr', action='store_true',

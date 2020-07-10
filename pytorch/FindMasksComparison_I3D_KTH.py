@@ -70,7 +70,7 @@ hyper_params = {
     "num_classes": config["num_classes"],
     "shuffle":1,
     "splitType": 'original',
-    hyper_params["last_stride"]:1
+    "last_stride":1
 }
 
 #some things are just easier to give via cmdline than changing conf all the time...

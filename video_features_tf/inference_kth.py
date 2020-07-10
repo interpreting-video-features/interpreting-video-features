@@ -1,12 +1,8 @@
 import tensorflow as tf
-from sklearn.metrics import classification_report
-from keras.utils import np_utils
-from PIL import Image
 import pandas as pd
 import numpy as np
 from models import clstm
 import ast
-import cv2
 import os
 
 CLIP_LENGTH = 32
@@ -212,7 +208,6 @@ def parse_fn(proto):
 
 
 def create_dataset(filepath):
-    import os.path
     dataset = tf.data.TFRecordDataset(filepath)
     if FLAGS.shuffle_data == 'yes':
         print('Shuffling the training data...')
@@ -284,7 +279,7 @@ with tf.Session() as sess:
 
             top5 = get_top_k(preds, TOP_X).tolist()
 
-            if(np.argmax(label) in top5):
+            if np.argmax(label) in top5:
                 guesses5.append(np.argmax(label))
                 print('label {} was in top {} guesses'.format(np.argmax(label), TOP_X))
             else:

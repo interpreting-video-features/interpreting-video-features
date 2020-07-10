@@ -1,4 +1,5 @@
 from keras.preprocessing.image import load_img, img_to_array
+import numpy as np
 
 
 def process_image(image_path):

@@ -1,12 +1,8 @@
 import tensorflow as tf
-from sklearn.metrics import classification_report
-from keras.utils import np_utils
-from PIL import Image
-import pandas as pd
 import numpy as np
-import ast
-import cv2
 import os
+
+import video_features_tf.models as models
 
 CLIP_LENGTH = 16
 NUM_CLASSES = 174
@@ -164,6 +160,7 @@ def parse_fn(proto):
 
     return images, label
 
+
 def create_dataset(filepath):
     dataset = tf.data.TFRecordDataset(filepath)
     print(filepath)
@@ -235,12 +232,12 @@ with tf.Session() as sess:
 
     for i in range(STEPS_VAL):
         sequence, label = sess.run(next_element)
-        print(i, end='\r')
+        print('\r{}'.format(i))
 
         preds = sess.run(prediction, feed_dict={x: sequence, y: label})
         top5 = get_top_k(preds[0], 5).tolist()
 
-        if(np.argmax(label) in top5):
+        if np.argmax(label) in top5:
             guesses5.append(np.argmax(label, axis=1))
             print('label {} was in top5 guesses'.format(np.argmax(label)))
         else:

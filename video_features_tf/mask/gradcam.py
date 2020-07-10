@@ -2,8 +2,10 @@ import cv2
 import numpy as np
 from PIL import Image
 import tensorflow as tf
+from skimage.transform import resize
 
 FLAGS = tf.app.flags.FLAGS
+
 
 def get_gradcam_blend(img, image_height, image_width, cam, cam_max):
     """
@@ -25,7 +27,8 @@ def get_gradcam_blend(img, image_height, image_width, cam, cam_max):
 
 def get_gradcam(sess, prediction, last_clstm_output,
                 y, original_input_var, mask_var, frame_inds,
-                sequence, label, target_index, FLAGS):
+                sequence, label, target_index,
+                image_height, image_width):
     
     prob = tf.keras.layers.Activation('softmax')(prediction)
 
@@ -47,7 +50,7 @@ def get_gradcam(sess, prediction, last_clstm_output,
     
     # Obtain values for conv and grad tensors
     target_conv_layer_value, \
-    target_conv_layer_grad_value = sess.run([target_conv_layer,
+        target_conv_layer_grad_value = sess.run([target_conv_layer,
                                              target_conv_layer_grad],
                                              feed_dict={original_input_var: sequence,
                                                         y: label,
@@ -67,8 +70,7 @@ def get_gradcam(sess, prediction, last_clstm_output,
         img = frame.astype(float)
         img -= np.min(img)
         img /= img.max()
-        cam = get_cam_after_relu(img,
-                                 conv_output=conv_output,
+        cam = get_cam_after_relu(conv_output=conv_output,
                                  conv_grad=grad)
         gradcams.append(cam)
         if np.max(cam) > cam_max:
@@ -76,7 +78,7 @@ def get_gradcam(sess, prediction, last_clstm_output,
     gradcam_masks = [] 
     # Loop over frames again to blend them with the gradcams and save.
     for i in range(FLAGS.seq_length):
-        frame = sequence[0,i,:]
+        frame = sequence[0, i, :]
         # Prepare frame for gradcam
         img = frame.astype(float)
         img -= np.min(img)
@@ -84,11 +86,11 @@ def get_gradcam(sess, prediction, last_clstm_output,
     
         # NORMALIZE PER FRAME
         if FLAGS.normalization_mode == 'frame':
-            gradcam_blend = gc.get_gradcam_blend(img, image_height,
+            gradcam_blend = get_gradcam_blend(img, image_height,
                     image_width, gradcams[i], np.max(gradcams[i]))
         # NORMALIZE PER SEQUENCE 
         elif FLAGS.normalization_mode == 'sequence':
-            gradcam_blend = gc.get_gradcam_blend(img, image_height,
+            gradcam_blend = get_gradcam_blend(img, image_height,
                     image_width, gradcams[i], cam_max)
         else:
             print('Error. Need to provide normalization mode.')
@@ -96,9 +98,9 @@ def get_gradcam(sess, prediction, last_clstm_output,
     return gradcam_masks
 
 
-def get_cam_after_relu(img, conv_output, conv_grad):
-    weights = np.mean(conv_grad, axis = (0, 1)) # alpha_k, [512]
-    cam = np.zeros(conv_output.shape[0 : 2], dtype = np.float32) # [7,7]
+def get_cam_after_relu(conv_output, conv_grad):
+    weights = np.mean(conv_grad, axis=(0, 1))  # alpha_k, [512]
+    cam = np.zeros(conv_output.shape[0:2], dtype=np.float32)  # [7,7]
 
     # Taking a weighted average
     for i, w in enumerate(weights):

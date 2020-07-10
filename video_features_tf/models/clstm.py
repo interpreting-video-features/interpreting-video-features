@@ -3,7 +3,6 @@ from __future__ import division
 from __future__ import print_function
 
 import ast
-import re
 
 import tensorflow as tf
 
@@ -49,7 +48,7 @@ def clstm_block(input_tensor, nb_hidden, ks1, ks2, pooling,
     return x, clstm_output
 
     
-def clstm_gap(sequence, bn):
+def clstm_gap(x, bn, num_classes):
 
     layers = ast.literal_eval(FLAGS.layers)
     rs = ast.literal_eval(FLAGS.return_sequences)
@@ -64,19 +63,16 @@ def clstm_gap(sequence, bn):
                             pooling=True, batch_normalization=bn,
                             return_sequences=rs[l])
 
-
     with tf.name_scope('gap'):
         x = tf.nn.avg_pool3d(x, ksize=[1,16,1,1,1],
                              strides=[1,1,1,1,1],
                              padding='VALID')
         print(x)
-        x = tf.layers.conv3d(inputs=x, filters=NUM_CLASSES, kernel_size=[1, 1, 1],
-                                 strides=[1, 1, 1], dilation_rate=[1, 1, 1],
-                                 padding='valid', data_format='channels_last')
-        # x = tf.nn.relu(x)
-        # x = tf.layers.dense(x, units=NUM_CLASSES)
+        x = tf.layers.conv3d(inputs=x, filters=num_classes, kernel_size=[1, 1, 1],
+                             strides=[1, 1, 1], dilation_rate=[1, 1, 1],
+                             padding='valid', data_format='channels_last')
         print(x)
-        x = tf.reshape(x, [-1, NUM_CLASSES])
+        x = tf.reshape(x, [-1, num_classes])
         print(x)
 
     return x

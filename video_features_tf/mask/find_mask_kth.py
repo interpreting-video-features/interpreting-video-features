@@ -1,15 +1,13 @@
-import tensorflow as tf
-from skimage.transform import resize
 from keras.utils import np_utils
-from models import clstm
-from helpers import util
+from tensorflow.models import clstm
+from tensorflow.helpers import util
+import tensorflow as tf
 import gradcam as gc
 import pandas as pd
 import numpy as np
 import mask
 import viz
 import ast
-import cv2
 import os
 
 NUM_CLASSES = 6
@@ -260,7 +258,6 @@ def parse_fn(proto):
     return images, label, video_ID
 
 def create_dataset(filepath):
-    import os.path
     dataset = tf.data.TFRecordDataset(filepath)
     # print(filepath)
     # print(os.path.isfile(filepath))
@@ -356,7 +353,7 @@ def main(argv):
         saver.restore(sess, "/workspace/checkpoints/" + FLAGS.checkpoint_name)
 
         l1loss = FLAGS.lambda_1*tf.reduce_sum(tf.abs(mask_clip))
-        tvnormLoss= FLAGS.lambda_2*calc_TVNorm(mask_clip, p=3, q=3)
+        tvnormLoss= FLAGS.lambda_2 * mask.calc_TV_norm(mask_clip, p=3, q=3)
         if FLAGS.focus_type == 'correct':
             label_index = tf.reshape(tf.argmax(y, axis=1), [])
         if FLAGS.focus_type == 'guessed':
@@ -494,7 +491,7 @@ def main(argv):
                     if(FLAGS.focus_type=="correct"):
                         target_index=np.argmax(label)
 
-                    gradcam = get_gradcam(sess, logits, clstm_3, y, original_input_var, mask_var, frame_inds,
+                    gradcam = gc.get_gradcam(sess, logits, clstm_3, y, original_input_var, mask_var, frame_inds,
                                           input_var, label, target_index, FLAGS.image_height, FLAGS.image_weight)
 
                     '''beginning of gradcam write to disk'''

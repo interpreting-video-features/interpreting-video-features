@@ -1,16 +1,11 @@
 import tensorflow as tf
-from skimage.transform import resize
-from keras.utils import np_utils
 import gradcam as gc
 import pandas as pd
 import numpy as np
 import mask
 import viz
-import ast
-import cv2
 import os
 
-NUM_CLASSES = 174
 
 NUM_CLASSES = 174
 lr = 0.001
@@ -211,6 +206,7 @@ def parse_fn(proto):
 
     return images, label, video_ID
 
+
 def create_dataset(filepath):
     import os.path
     dataset = tf.data.TFRecordDataset(filepath)
@@ -222,8 +218,8 @@ def create_dataset(filepath):
     dataset = dataset.apply(tf.data.experimental.map_and_batch(
           map_func=parse_fn,
           batch_size=FLAGS.batch_size,
-          num_parallel_calls=FLAGS.nb_parallel_calls)) \
-    .prefetch(FLAGS.batch_size)
+          num_parallel_calls=FLAGS.nb_parallel_calls)
+        ).prefetch(FLAGS.batch_size)
 
     return dataset
 
@@ -278,7 +274,6 @@ def main(argv):
                              initializer=original_input_var[:,0,:,:,:])
         perturb_op = tf.reshape(perturb_op, seq_shape)
 
-
     y = tf.placeholder(tf.float32, [FLAGS.batch_size, NUM_CLASSES])
     logits, clstm_3 = clstm(perturb_op)
     after_softmax = tf.nn.softmax(logits)
@@ -322,8 +317,8 @@ def main(argv):
         
         sess.run(validation_init_op)
 
-        l1loss = FLAGS.lambda_1*tf.reduce_sum(tf.abs(mask_clip))
-        tvnormLoss= FLAGS.lambda_2*calc_TVNorm(mask_clip, p=3, q=3)
+        l1loss = FLAGS.lambda_1 * tf.reduce_sum(tf.abs(mask_clip))
+        tvnormLoss= FLAGS.lambda_2 * mask.calc_TV_norm(mask_clip, p=3, q=3)
         if FLAGS.focus_type == 'correct':
             label_index = tf.reshape(tf.argmax(y, axis=1), [])
         if FLAGS.focus_type == 'guessed':
@@ -455,35 +450,38 @@ def main(argv):
                     if(FLAGS.focus_type=="correct"):
                         target_index=np.argmax(label)
 
-                    gradcam = get_gradcam(sess, logits, clstm_3, y, original_input_var, mask_var, frame_inds,
-                                          input_var, label, target_index, FLAGS.image_size, FLAGS.image_size)
+                    gradcam = gc.get_gradcam(sess, logits, clstm_3, y,
+                                             original_input_var, mask_var, frame_inds,
+                                             input_var, label, target_index,
+                                             FLAGS.image_size, FLAGS.image_size)
 
                     '''beginning of gradcam write to disk'''
-                    
 
                     os.makedirs(save_path, exist_ok=True)
                     
-                if(do_gradcam and run_temp_mask):
-                    viz.create_image_arrays(input_var, gradcam, time_mask,
-                                        save_path, video_ID, 'freeze',
-                                        FLAGS.image_size, FLAGS.image_size)
+                if do_gradcam and run_temp_mask:
+                    viz.create_image_arrays(
+                        input_var, gradcam, time_mask,
+                        save_path, video_ID, 'freeze',
+                        FLAGS.image_size, FLAGS.image_size)
 
                     if FLAGS.temporal_mask_type == 'reverse':
                         # Also create the image arrays for the reverse operation.
-                        viz.create_image_arrays(input_var, gradcam, time_mask,
-                                            save_path, video_ID, 'reverse',
-                                            FLAGS.image_size, FLAGS.image_size)
+                        viz.create_image_arrays(
+                            input_var, gradcam, time_mask,
+                            save_path, video_ID, 'reverse',
+                            FLAGS.image_size, FLAGS.image_size)
                 
-                if(run_temp_mask):
-                    viz.visualize_results(input_var,
-                                      mask.perturb_sequence(input_var,
-                                                      time_mask, perb_type='reverse'),
-                                      time_mask,
-                                      root_dir=save_path,
-                                      case=video_ID, mark_imgs=True,
-                                      iter_test=False)
+                if run_temp_mask:
+                    viz.visualize_results(
+                        input_var,
+                        mask.perturb_sequence(
+                            input_var, time_mask, perb_type='reverse'),
+                        time_mask,
+                        root_dir=save_path,
+                        case=video_ID, mark_imgs=True,
+                        iter_test=False)
     
 
 if __name__ == '__main__':
     tf.app.run()
-            

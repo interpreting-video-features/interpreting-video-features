@@ -109,21 +109,21 @@ def main():
             hyper_params["num_workers"]))
 
 
-        train_data = ImLoader(config["dataDir"] + "/train/")
+        train_data = ImLoader(config['data_folder'] + "/train/")
         train_loader = torch.utils.data.DataLoader(
                 train_data,
                 batch_size=hyper_params['batch_size'], shuffle=hyper_params["shuffle"],
                 num_workers=hyper_params['num_workers'], pin_memory=True,
                 drop_last=True)
 
-        val_data = ImLoader(config["dataDir"] +"/validation/", get_item_id=True)
+        val_data = ImLoader(config['data_folder'] +"/validation/", get_item_id=True)
         val_loader = torch.utils.data.DataLoader(
                 val_data,
                 batch_size=hyper_params['batch_size'], shuffle=False,
                 num_workers=hyper_params['num_workers'], pin_memory=True,
                 drop_last=True)
 
-        test_data = ImLoader(config["dataDir"] + "/smth-smth_Data/test/")
+        test_data = ImLoader(config['data_folder'] + "/smth-smth_Data/test/")
         test_loader = torch.utils.data.DataLoader(
                 test_data,
                 batch_size=hyper_params['batch_size'], shuffle=False,

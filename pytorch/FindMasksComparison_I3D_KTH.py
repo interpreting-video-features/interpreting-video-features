@@ -69,7 +69,8 @@ hyper_params = {
     "column_units": config["column_units"],
     "num_classes": config["num_classes"],
     "shuffle":1,
-    "splitType": 'original'
+    "splitType": 'original',
+    hyper_params["last_stride"]:1
 }
 
 #some things are just easier to give via cmdline than changing conf all the time...

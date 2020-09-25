@@ -8,7 +8,6 @@ import generate_tfrecords as gtfr
 
 
 def process_files_and_write(df, labels_df, split_folder, args):
-
     output_filename = split_folder[:-1] + '.tfrecords'
     output_file = os.path.join(args.output_folder, output_filename)
     print('Output file path: ', output_file)
@@ -17,9 +16,9 @@ def process_files_and_write(df, labels_df, split_folder, args):
     for ind, row in df.iterrows():
         print('Index in df: ', ind, end='\r')
         video_id = str(row['id'])
-        label = row['template'].replace('[','').replace(']','')
+        label = row['template'].replace('[', '').replace(']', '')
         label_number = labels_df[label]
-        label_folder_path = split_folder + str(label_number) + '/' 
+        label_folder_path = split_folder + str(label_number) + '/'
         frames_folder_path = label_folder_path + video_id + '/'
         video_buffer = gtfr.get_video_buffer(frames_folder_path,
                                              start_frame=0,
@@ -31,16 +30,16 @@ def process_files_and_write(df, labels_df, split_folder, args):
         writer.write(example.SerializeToString())
 
     writer.close()
-        
+
 
 def main():
     train_json = '~/Downloads/something-something-v2-train.json'
     val_json = '~/Downloads/something-something-v2-validation.json'
-    
+
     test_json = '~/Downloads/something-something-v2-test.json'
-    
+
     labels_json = '~/Downloads/something-something-v2-labels.json'
-    
+
     labels_df = pd.read_json(labels_json, typ='series')
 
     # SET VAL OR TRAIN
@@ -79,4 +78,3 @@ def main():
 if __name__ == '__main__':
     main()
     print('\n')
-

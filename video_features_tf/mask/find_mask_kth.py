@@ -198,11 +198,11 @@ def get_paths_for_sequence(subject, video_id):
         frame_paths.append(frame_path)
     return frame_paths
 
-        
+
 def read_images_and_return_list(paths):
     list_to_return = []
     for p in paths:
-        img = util.process_image(p, (FLAGS.image_height, FLAGS.image_width, 3))                                                                                                                                                                   
+        img = util.process_image(p, (FLAGS.image_height, FLAGS.image_width, 3))
         img = img.reshape((1, 1, FLAGS.image_height, FLAGS.image_width, 3))
         list_to_return.append(img)
     return list_to_return
@@ -236,8 +236,8 @@ def parse_fn(proto):
     parsed_features = tf.parse_single_example(proto, keys_to_features)
 
     # Indices across sequence
-    frame_inds = tf.range(parsed_features['nb_frames'])  
-    
+    frame_inds = tf.range(parsed_features['nb_frames'])
+
     # Decode the image strings
     images = tf.map_fn(lambda i: \
                        tf.cast(tf.image.decode_jpeg(
@@ -256,6 +256,7 @@ def parse_fn(proto):
     label.set_shape([NUM_CLASSES])
 
     return images, label, video_ID
+
 
 def create_dataset(filepath):
     dataset = tf.data.TFRecordDataset(filepath)
@@ -284,7 +285,7 @@ def main(argv):
     tf.reset_default_graph()
     seq_shape = (FLAGS.batch_size, FLAGS.seq_length, FLAGS.image_height, FLAGS.image_width, 3)
     seq_zeros = np.zeros(seq_shape)
-    
+
     # Build graph
     graph = tf.Graph()
 
@@ -318,7 +319,7 @@ def main(argv):
             update_tensor = (1-mask_clip[current_elem])*original_input_var[:,current_elem,:,:,:] + \
                             mask_clip[current_elem]*last_value
             return update_tensor
-        
+
         perturb_op = tf.scan(fn=recurrence,
                              elems=frame_inds,
                              initializer=original_input_var[:,0,:,:,:])
@@ -327,8 +328,8 @@ def main(argv):
     y = tf.placeholder(tf.float32, [FLAGS.batch_size, NUM_CLASSES])
     logits, clstm_3 = clstm.clstm(perturb_op, bn=False, is_training=False, num_classes=NUM_CLASSES)
     after_softmax = tf.nn.softmax(logits)
-    
-    
+
+
     # Settings for temporal mask method
     N = FLAGS.nb_iterations_graddescent
     maskType='gradient'
@@ -337,7 +338,7 @@ def main(argv):
     do_gradcam=True
     run_temp_mask=True
     ita = 1
-            
+
     variables_to_restore = {}
     for variable in tf.global_variables():
         if variable.name.startswith('mask'):
@@ -347,7 +348,7 @@ def main(argv):
         else:
             # Variables need to be renamed to match with the checkpoint.
             variables_to_restore[variable.name.replace(':0','')] = variable
-    
+
     with tf.Session() as sess:
         saver = tf.train.Saver(var_list=variables_to_restore)  # All but the input which is a variable
         saver.restore(sess, "/workspace/checkpoints/" + FLAGS.checkpoint_name)
@@ -363,15 +364,15 @@ def main(argv):
         class_loss = tf.cast(class_loss, tf.float32)
 
         loss_function = l1loss + tvnormLoss + class_loss
-        
+
         optimizer = tf.train.AdamOptimizer(learning_rate=FLAGS.learning_rate_start)
         train_var = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, 'mask')
 
         with tf.variable_scope('minimize'):
             training_op = optimizer.minimize(loss_function, var_list=train_var)
-    
+
         sess.run(tf.variables_initializer(optimizer.variables()))
-        
+
         for ind, row in df.iterrows():
 
             # Get values
@@ -387,38 +388,36 @@ def main(argv):
             current_class = np.argmax(label)
             print(current_class)
 
-
-            if current_class in df['Label'].values.tolist() and video_ID in [derp for derp in df[df['Label']==current_class]['Video_ID'].values]:
+            if (current_class in df['Label'].values.tolist() and
+                    video_ID in [derp for derp in df[df['Label']==current_class]['Video_ID'].values]):
 
                 print("found clip of interest ", current_class, video_ID)
 
-                preds = sess.run(logits, feed_dict={mask_var: np.zeros((FLAGS.seq_length)),
+                preds = sess.run(logits, feed_dict={mask_var: np.zeros(FLAGS.seq_length),
                                  original_input_var: input_var,
                                  frame_inds: range(FLAGS.seq_length)})
                 print('np argmax preds', np.argmax(preds))
 
-                masks = []
-                
-                #eta is for breaking out of the grad desc early if it hasn't improved
+                #  eta is for breaking out of the grad desc early if it hasn't improved
                 eta = 0.00001
-                
+
                 have_output=False
 
                 if preds[:, int(current_class)] < 0.1:
                     print('the guess for the correct class was less than 0.1')
                     continue
-                
-                #Start mask optimization, should be
-                #Loss = lam1*||Mask size|| + lam2*Beta loss + class_score
-                
+
+                #  Start mask optimization, should be
+                #  Loss = lam1*||Mask size|| + lam2*Beta loss + class_score
+
                 if not have_output:
-                    output = sess.run(after_softmax, feed_dict={mask_var: np.zeros((FLAGS.seq_length)),
+                    output = sess.run(after_softmax, feed_dict={mask_var: np.zeros(FLAGS.seq_length),
                                      original_input_var: input_var,
                                      frame_inds: range(FLAGS.seq_length)})
                     have_output=True
-                
-                if(run_temp_mask):
-                    if (maskType == 'gradient'):
+
+                if run_temp_mask:
+                    if maskType == 'gradient':
                         start_mask = mask.init_mask(input_var, mask_var, original_input_var,
                                               frame_inds, after_softmax, sess,
                                               label, thresh=0.9,
@@ -431,10 +430,10 @@ def main(argv):
                         oldLoss = 999999
                         for nidx in range(N):
 
-                            if(nidx%10==0):
+                            if nidx%10==0:
                                 print("on nidx: ", nidx)
                                 print("mask_clipped is: ", sess.run(mask_clip))
-                            
+
                             _, loss_value, \
                             l1value, tvvalue, classlossvalue = sess.run([training_op,
                                                                         loss_function,
@@ -449,10 +448,9 @@ def main(argv):
                                                                                    l1value,
                                                                                    tvvalue,
                                                                                    classlossvalue))
-                            if(abs(oldLoss-loss_value)<eta):
-                                break;
+                            if abs(oldLoss-loss_value)<eta:
+                                break
 
-                        
                         time_mask = sess.run(mask_clip)
                         save_path = os.path.join("cam_saved_images",
                                                  FLAGS.output_folder,
@@ -462,10 +460,10 @@ def main(argv):
                                                  "_cs%5.4f"%output[:,np.argmax(label)] + \
                                                  "gs%5.4f"%output[:,np.argmax(output)],
                                                  "combined")
-                        
+
                         if not os.path.exists(save_path):
                             os.makedirs(save_path)
-                        
+
                         f = open(save_path+"/ClassScoreFreezecase"+video_ID+".txt","w+")
                         f.write(str(classlossvalue))
                         f.close()
@@ -473,33 +471,32 @@ def main(argv):
                         if FLAGS.temporal_mask_type == 'reverse':
 
                             perturbed_sequence = mask.perturb_sequence(input_var, time_mask, perb_type='reverse')
-                            
-                            class_loss_rev = sess.run(class_loss, feed_dict={mask_var: np.zeros((FLAGS.seq_length)),
+
+                            class_loss_rev = sess.run(class_loss, feed_dict={mask_var: np.zeros(FLAGS.seq_length),
                                                                              original_input_var: perturbed_sequence,
                                                                              frame_inds: range(FLAGS.seq_length)})
                             f = open(save_path+"/ClassScoreReversecase" + video_ID + ".txt","w+")
                             f.write(str(class_loss_rev))
                             f.close()
 
-                    if(verbose):
+                    if verbose:
                         print("resulting mask is: ", sess.run(mask_clip))
 
-                if(do_gradcam):  
+                if do_gradcam:
 
-                    if(FLAGS.focus_type=="guessed"):
+                    if FLAGS.focus_type== "guessed":
                         target_index=np.argmax(output)
-                    if(FLAGS.focus_type=="correct"):
+                    if FLAGS.focus_type== "correct":
                         target_index=np.argmax(label)
 
                     gradcam = gc.get_gradcam(sess, logits, clstm_3, y, original_input_var, mask_var, frame_inds,
                                           input_var, label, target_index, FLAGS.image_height, FLAGS.image_weight)
 
                     '''beginning of gradcam write to disk'''
-                    
 
                     os.makedirs(save_path, exist_ok=True)
-                    
-                if(do_gradcam and run_temp_mask):
+
+                if do_gradcam and run_temp_mask:
                     viz.create_image_arrays(input_var, gradcam, time_mask,
                                         save_path, video_ID, 'freeze',
                                         FLAGS.image_width, FLAGS.image_height)
@@ -509,8 +506,8 @@ def main(argv):
                         viz.create_image_arrays(input_var, gradcam, time_mask,
                                             save_path, video_ID, 'reverse',
                                             FLAGS.image_width, FLAGS.image_height)
-                
-                if(run_temp_mask):
+
+                if run_temp_mask:
                     viz.visualize_results(input_var,
                                       mask.perturb_sequence(input_var,
                                                       time_mask, perb_type='reverse'),
@@ -518,8 +515,8 @@ def main(argv):
                                       root_dir=save_path,
                                       case=video_ID, mark_imgs=True,
                                       iter_test=False)
-    
+
 
 if __name__ == '__main__':
     tf.app.run()
-            
+

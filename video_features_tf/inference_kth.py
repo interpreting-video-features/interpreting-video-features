@@ -5,126 +5,10 @@ from models import clstm
 import ast
 import os
 
-CLIP_LENGTH = 32
-NUM_CLASSES = 6
-
-
-def del_all_flags(FLAGS):
-    flags_dict = FLAGS._flags()    
-    keys_list = [keys for keys in flags_dict]    
-    for keys in keys_list:
-        FLAGS.__delattr__(keys)
-
-
-del_all_flags(tf.flags.FLAGS)
-
-NUM_CLASSES = 6
-TOP_X = 3  # top x result to compute.
-lr = 0.001
-
-tf.app.flags.DEFINE_integer('nb_epochs',
-    10,
-    """Number of epochs to train.""")
-tf.app.flags.DEFINE_integer('seq_length',
-    32,
-    """Length of video clips (nb of frames).""")
-tf.app.flags.DEFINE_string('layers',
-    '[32,32]',
-    """Number of hidden units per CLSTM-layer, given as a list.
-       For example [64,32,16]. The number of layers will be implicit
-       from len(list).""")
-tf.app.flags.DEFINE_string('return_sequences',
-    '[True,True]',
-    """Whether to return the full sequence or only the
-       last element at every hidden layer for CLSTM.""")
-tf.app.flags.DEFINE_string('only_last_element_for_fc',
-    'no',
-    """Whether to give only the last element from the last CLSTM
-        layer to the FC layer, even if return_sequences=True for that layer.""")
-tf.app.flags.DEFINE_string('pooling_method',
-    'max',
-    """avg|max""")
-tf.app.flags.DEFINE_integer('kernel_size_1',
-    3,
-    """First size of convolutional kernel in clstm-unit.""")
-tf.app.flags.DEFINE_integer('kernel_size_2',
-    5,
-    """Second size of convolutional kernel in clstm-unit.""")
-tf.app.flags.DEFINE_integer('image_width',
-    160,
-    """Image width.""")
-tf.app.flags.DEFINE_integer('image_height',
-    120,
-    """Image height.""")
-tf.app.flags.DEFINE_integer('shuffle_buffer',
-    2500,
-    """Shuffle buffer.""")
-tf.app.flags.DEFINE_integer('batch_size',
-    24,
-    """Number of sequences per batch.""")
-tf.app.flags.DEFINE_integer('strides',
-    2,
-    """x sized strides for C-LSTM kernel (x,x).""")
-tf.app.flags.DEFINE_string('padding',
-    'valid',
-    """Padding for the C-LSTM convolution. 'same' | 'valid' """)
-tf.app.flags.DEFINE_float('dropout_rate',
-    0.0,
-    """The rate at which to perform dropout (how much to drop).""")
-tf.app.flags.DEFINE_float('momentum',
-    0.9,
-    """Momentum for the gradient descent.""")
-tf.app.flags.DEFINE_float('weight_decay',
-    0.00001,
-    """Decoupled weight decay for momentum optimizer).""")
-tf.app.flags.DEFINE_integer('nb_parallel_calls',
-    16,
-    """Number of parallel core calls when preparing a batch.""")
-tf.app.flags.DEFINE_integer('lr_decay_patience',
-    2,
-    """Number of epochs without improvement to wait before decreased learning rate.""")
-tf.app.flags.DEFINE_string('shuffle_data',
-    'yes',
-    """Whether to shuffle the training data. See SHUFFLE_BUFFER param.""")
-tf.app.flags.DEFINE_string('train_subjects',
-    '[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16]',
-    """Subjects to train on.""")
-tf.app.flags.DEFINE_string('val_subjects',
-    '[17,18,19,20,21,22,23,24,25]',
-    """Subjects to validate on.""")
-tf.app.flags.DEFINE_string('checkpoint_name',
-    'model.ckpt',
-    """To go in checkpoints/model.ckpt""")
-tf.app.flags.DEFINE_string('tfrecords_folder',
-    '/data/kth_dataset/tfrecords_sample32/',
-    """Directory containing the subject .tfrecords files.""")
-tf.app.flags.DEFINE_string('test_run',
-    'no',
-    """Whether to only do a test run with few steps. 'yes' if so.""")
-tf.app.flags.DEFINE_string('model',
-    'clstm',
-    """Which model to run with. cnn_3d | clstm""")
-tf.app.flags.DEFINE_string('optimizer',
-    'adadelta',
-    """Which optimizer to run with. adadelta | momentum | momentum_decoupled""")
-tf.app.flags.DEFINE_float('learning_rate_start',
-    0.001,
-    """Learning rate to start with.""")
-tf.app.flags.DEFINE_float('learning_rate_end',
-    0.001,
-    """Minimum learning rate after decay.""")
-tf.app.flags.DEFINE_float('kernel_regularizer',
-    0.01,
-    """Kernel regularizer for the ConvLSTM2D layer.""")
-tf.app.flags.DEFINE_string('output_folder',
-    None,
-    """Where to save predictions as .npy files""")
-
-print(tf.app.flags.FLAGS.flag_values_dict())
-
 FLAGS = tf.app.flags.FLAGS
+CLIP_LENGTH = 32
+TOP_X = 3  # top x result to compute.
 
-NUM_CLASSES = 6
 PAD_LENGTH = 32
 
 subjects_clips_df = pd.read_csv('/data/subjects_clips.csv')
@@ -201,7 +85,7 @@ def parse_fn(proto):
     # TEST REVERSE PERFORMANCE
     # images = tf.reverse(tensor=images, axis=[0])
     # import pdb; pdb.set_trace()
-    label = tf.one_hot(parsed_features['label'], NUM_CLASSES)
+    label = tf.one_hot(parsed_features['label'], FLAGS.nb_classes)
     label = tf.cast(label, tf.int32)
 
     return images, label
@@ -234,11 +118,11 @@ tf.reset_default_graph()
 graph = tf.Graph()
 learning_rate = tf.placeholder(tf.float32, [])
 x = tf.placeholder(tf.float32, [None, FLAGS.seq_length, FLAGS.image_height, FLAGS.image_width, 3])
-y = tf.placeholder(tf.float32, [None, NUM_CLASSES])
-prediction, clstm_3 = clstm.clstm(x, bn=False, is_training=False, num_classes=NUM_CLASSES)
+y = tf.placeholder(tf.float32, [None, FLAGS.nb_classes])
+prediction, clstm_3 = clstm.clstm(x, bn=False, is_training=False, num_classes=FLAGS.nb_classes)
 loss = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits_v2(
     logits=prediction, labels=y))
-optimizer = tf.train.AdadeltaOptimizer(learning_rate=lr)
+optimizer = tf.train.AdadeltaOptimizer(learning_rate=FLAGS.learning_rate_start)
 
 
 # Now load the checkpoint variable values

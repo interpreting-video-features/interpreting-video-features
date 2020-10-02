@@ -613,11 +613,11 @@ def find_masks(dat_loader, model, hyper_params, lam1, lam2, N, maskType="gradien
                         f.write(str(classLoss.item()))
                         f.close()
 
-                        class_loss_freeze = model(perturb_sequence(input_var, time_mask, perturbation_type="reverse"))
-                        class_loss_freeze = class_loss_freeze[batch_index, mask_target[batch_index]]
+                        class_loss_reverse = model(perturb_sequence(input_var, time_mask, perturbation_type="reverse"))
+                        class_loss_reverse = class_loss_reverse[batch_index, mask_target[batch_index]]
 
                         f = open(score_save_path + "/ClassScoreReversecase" + video_id[batch_index] + ".txt", "w+")
-                        f.write(str(class_loss_freeze.item()))
+                        f.write(str(class_loss_reverse.item()))
                         f.close()
 
                         # as soon as you have the time mask, and freeze/reverse scores,
@@ -629,7 +629,7 @@ def find_masks(dat_loader, model, hyper_params, lam1, lam2, N, maskType="gradien
                                                      'original_score_guess': original_score_guess,
                                                      'original_score_true': original_score_true,
                                                      'freeze_score': classLoss.item(),
-                                                     'reverse_score': class_loss_freeze.item()
+                                                     'reverse_score': class_loss_reverse.item()
                                                      })
 
                 if doGradCam:

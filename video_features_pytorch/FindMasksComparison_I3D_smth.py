@@ -294,10 +294,10 @@ def find_masks(dat_loader, model, hyper_params, lam1, lam2, N, maskType="gradien
                     RESIZE_FLAG = 0
 
                 if doGradCam and runTempMask:
-                    viz.createImageArrays(
+                    viz.create_image_arrays(
                         input_var, mask, time_mask, batch_index, "freeze", output_images_folder_cam_combined,
                         targTag, RESIZE_FLAG, RESIZE_SIZE_WIDTH, RESIZE_SIZE_HEIGHT)
-                    viz.createImageArrays(
+                    viz.create_image_arrays(
                         input_var, mask, time_mask, batch_index, "reverse", output_images_folder_cam_combined,
                         targTag, RESIZE_FLAG, RESIZE_SIZE_WIDTH, RESIZE_SIZE_HEIGHT)
 

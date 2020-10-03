@@ -242,51 +242,52 @@ def find_masks(dat_loader, model, config, lam1, lam2, N, ita, maskType="gradient
 
                     # gradient descent for finding temporal masks
                     model.zero_grad()
-                    timeMask = mask.initMask(input_var, model, intraBidx, maskTarget, thresh=0.9, mode="central",
-                                        maskPertType=temporalMaskType)
-                    optimizer = torch.optim.Adam([timeMask], lr=0.2)
-                    oldLoss = 999999
+                    time_mask = mask.init_mask(
+                        input_var, model, intraBidx, maskTarget, thresh=0.9, mode="central",
+                        maskPertType=temporalMaskType)
+                    optimizer = torch.optim.Adam([time_mask], lr=0.2)
+                    old_loss = 999999
                     for nidx in range(N):
 
                         if nidx % 25 == 0:
                             print("on nidx: ", nidx)
 
-                        mask_clip = torch.sigmoid(timeMask)
+                        mask_clip = torch.sigmoid(time_mask)
                         l1loss = lam1 * torch.sum(torch.abs(mask_clip))
-                        tvnormLoss = lam2 * mask.calc_TVNorm(mask_clip, p=3, q=3)
+                        tvnorm_loss = lam2 * mask.calc_TVNorm(mask_clip, p=3, q=3)
 
-                        classLoss = model(mask.perturbSequence(input_var, mask_clip, perbType=temporalMaskType))
+                        class_loss = model(mask.perturb_sequence(input_var, mask_clip, perbType=temporalMaskType))
 
-                        classLoss = classLoss[intraBidx, maskTarget[intraBidx]]
+                        class_loss = class_loss[intraBidx, maskTarget[intraBidx]]
 
-                        loss = l1loss + tvnormLoss + classLoss
+                        loss = l1loss + tvnorm_loss + class_loss
 
-                        if abs(oldLoss - loss) < eta:
+                        if abs(old_loss - loss) < eta:
                             break;
 
                         optimizer.zero_grad()
                         loss.backward()
                         optimizer.step()
 
-                    timeMask = torch.sigmoid(timeMask)
-                    scoreSavePath = os.path.join("cam_saved_images", args.subDir, str(target[intraBidx].item()), \
-                                                 label[intraBidx] + "g_" + str(torch.argmax(output[intraBidx]).item()) \
-                                                 + "_gs%5.4f" % torch.max(output[intraBidx]).item() \
-                                                 + "_cs%5.4f" % output[intraBidx][target[intraBidx]].item(), "combined")
+                    time_mask = torch.sigmoid(time_mask)
+                    score_save_path = os.path.join(
+                        "cam_saved_images", args.subDir, str(target[intraBidx].item()),
+                        label[intraBidx] + "g_" + str(torch.argmax(output[intraBidx]).item())
+                        + "_gs%5.4f" % torch.max(output[intraBidx]).item()
+                        + "_cs%5.4f" % output[intraBidx][target[intraBidx]].item(), "combined")
 
-                    if not os.path.exists(scoreSavePath):
-                        os.makedirs(scoreSavePath)
+                    if not os.path.exists(score_save_path):
+                        os.makedirs(score_save_path)
 
-                    f = open(scoreSavePath + "/ClassScoreFreezecase" + label[intraBidx] + ".txt", "w+")
-                    f.write(str(classLoss.item()))
+                    f = open(score_save_path + "/ClassScoreFreezecase" + label[intraBidx] + ".txt", "w+")
+                    f.write(str(class_loss.item()))
                     f.close()
 
-                    classLossFreeze = model(mask.perturbSequence(input_var, timeMask, perbType="reverse"))
-                    # classLoss = sm(classLoss)
-                    classLossFreeze = classLossFreeze[intraBidx, maskTarget[intraBidx]]
+                    class_loss_freeze = model(mask.perturb_sequence(input_var, time_mask, perbType="reverse"))
+                    class_loss_freeze = class_loss_freeze[intraBidx, maskTarget[intraBidx]]
 
-                    f = open(scoreSavePath + "/ClassScoreReversecase" + label[intraBidx] + ".txt", "w+")
-                    f.write(str(classLossFreeze.item()))
+                    f = open(score_save_path + "/ClassScoreReversecase" + label[intraBidx] + ".txt", "w+")
+                    f.write(str(class_loss_freeze.item()))
                     f.close()
 
                     # as soon as you have the time mask, and freeze/reverse scores,
@@ -294,15 +295,15 @@ def find_masks(dat_loader, model, config, lam1, lam2, N, ita, maskType="gradient
                     clipsTimeMaskResults.append({'true_class': int(target[intraBidx].item()),
                                                  'pred_class': int(torch.argmax(output[intraBidx]).item()),
                                                  'video_id': label[intraBidx],
-                                                 'time_mask': timeMask.detach().cpu().numpy(),
+                                                 'time_mask': time_mask.detach().cpu().numpy(),
                                                  'original_score_guess': torch.max(output[intraBidx]).item(),
                                                  'original_score_true': output[intraBidx][target[intraBidx]].item(),
-                                                 'freeze_score': classLoss.item(),
-                                                 'reverse_score': classLossFreeze.item()
+                                                 'freeze_score': class_loss.item(),
+                                                 'reverse_score': class_loss_freeze.item()
                                                  })
 
                     if verbose:
-                        print("resulting mask is: ", timeMask)
+                        print("resulting mask is: ", time_mask)
 
                 if doGradCam:
 
@@ -348,26 +349,23 @@ def find_masks(dat_loader, model, config, lam1, lam2, N, ita, maskType="gradient
 
                     os.makedirs(output_images_folder_cam_combined, exist_ok=True)
 
-                    clip_size = mask.shape[0]
-
                     RESIZE_FLAG = 0
-                    SAVE_INDIVIDUALS = 1
 
                 if doGradCam and runTempMask:
-                    viz.createImageArrays(input_var, mask, timeMask, intraBidx, "freeze", output_images_folder_cam_combined,
-                                      targTag, \
-                                      RESIZE_FLAG, RESIZE_SIZE_WIDTH, RESIZE_SIZE_HEIGHT)
-                    viz.createImageArrays(input_var, mask, timeMask, intraBidx, "reverse",
-                                      output_images_folder_cam_combined, targTag, \
-                                      RESIZE_FLAG, RESIZE_SIZE_WIDTH, RESIZE_SIZE_HEIGHT)
+                    viz.create_image_arrays(input_var, mask, time_mask, intraBidx, "freeze", output_images_folder_cam_combined,
+                                            targTag, \
+                                            RESIZE_FLAG, RESIZE_SIZE_WIDTH, RESIZE_SIZE_HEIGHT)
+                    viz.create_image_arrays(input_var, mask, time_mask, intraBidx, "reverse",
+                                            output_images_folder_cam_combined, targTag, \
+                                            RESIZE_FLAG, RESIZE_SIZE_WIDTH, RESIZE_SIZE_HEIGHT)
 
                 if runTempMask:
                     viz.vizualize_results(input_var[intraBidx],
-                                      mask.perturbSequence(input_var, timeMask, perbType=temporalMaskType)[intraBidx],
-                                      timeMask, rootDir=output_images_folder_cam_combined, case=targTag, markImgs=True,
+                                      mask.perturbSequence(input_var, time_mask, perbType=temporalMaskType)[intraBidx],
+                                      time_mask, rootDir=output_images_folder_cam_combined, case=targTag, markImgs=True,
                                       iterTest=False)
 
-                    masks.append(timeMask)
+                    masks.append(time_mask)
 
                     # finally, write pickle files to disk
 

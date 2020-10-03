@@ -42,7 +42,7 @@ def vizualize_results_on_gradcam(gradCamImage, mask, rootDir, case="0", roundUpM
     if not os.path.exists(rootDir):
         os.makedirs(rootDir)
 
-    dots = findTempMaskRedDots(imageWidth, imageHeight, mask, roundUpMask)
+    dots = find_temp_mask_red_dots(imageWidth, imageHeight, mask, roundUpMask)
 
     dotOffset = imageWidth * 2
     for i in range(len(mask)):
@@ -64,7 +64,7 @@ def vizualize_results_on_gradcam(gradCamImage, mask, rootDir, case="0", roundUpM
     f.close()
 
 
-def findTempMaskRedDots(imageWidth, imageHeight, mask, roundUpMask):
+def find_temp_mask_red_dots(imageWidth, imageHeight, mask, roundUpMask):
     maskLen = len(mask)
     dotWidth = int(imageWidth // (maskLen + 4))
     dotPadding = int((imageWidth - (dotWidth * maskLen)) // maskLen)
@@ -93,8 +93,8 @@ def findTempMaskRedDots(imageWidth, imageHeight, mask, roundUpMask):
     return dots
 
 
-def createImageArrays(input_sequence, gradcamMask, timeMask, intraBidx, temporalMaskType, output_folder, targTag,
-                      RESIZE_FLAG, RESIZE_SIZE_WIDTH, RESIZE_SIZE_HEIGHT):
+def create_image_arrays(input_sequence, gradcamMask, timeMask, intraBidx, temporalMaskType, output_folder, targTag,
+                        RESIZE_FLAG, RESIZE_SIZE_WIDTH, RESIZE_SIZE_HEIGHT):
     input_to_model = input_sequence[intraBidx][None, :, :, :, :]
 
     input_data_unnormalised = input_to_model[0].cpu().permute(1, 2, 3, 0).numpy()

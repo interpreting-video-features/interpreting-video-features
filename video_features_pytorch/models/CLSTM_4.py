@@ -9,7 +9,7 @@ class Model(torch.nn.Module):
     def __init__(self, num_classes=174, nb_lstm_units=32, channels=3, conv_kernel_size=(5, 5), pool_kernel_size=(2, 2),
                  top_layer=True, avg_pool=False, batch_normalization=True, lstm_layers=4, step=16,
                  image_size=(224, 224), dropout=0, conv_stride=(1, 1), effective_step=[4, 8, 12, 15],
-                 useEntireSeq=False, addSoftMax=False):
+                 use_entire_seq=False, add_softmax=False):
 
         super(Model, self).__init__()
 
@@ -27,11 +27,11 @@ class Model(torch.nn.Module):
         self.dropout = dropout
         self.conv_stride = conv_stride
         self.effective_step = effective_step
-        self.addSoftMax = addSoftMax
-        self.UseEntireSeq = useEntireSeq
+        self.add_softmax = add_softmax
+        self.use_entire_seq = use_entire_seq
         self.build()
 
-        self.firstCLSTMLayer = None
+        self.clstm = None
         self.endFC = None
         self.sm = None
 
@@ -44,14 +44,14 @@ class Model(torch.nn.Module):
         hidden_states = lstm_outputs[0]
 
         """
-        self.firstCLSTMLayer = ConvLSTM(input_channels=self.channels,
-                                        hidden_channels=[self.nb_lstm_units] * self.lstm_layers,
-                                        kernel_size=self.c_kernel_size[0], conv_stride=self.conv_stride,
-                                        pool_kernel_size=self.pool_kernel_size, step=self.step,
-                                        effective_step=self.effective_step,
-                                        batch_normalization=self.batch_normalization, dropout=self.dropout)
+        self.clstm = ConvLSTM(input_channels=self.channels,
+                              hidden_channels=[self.nb_lstm_units] * self.lstm_layers,
+                              kernel_size=self.c_kernel_size[0], conv_stride=self.conv_stride,
+                              pool_kernel_size=self.pool_kernel_size, step=self.step,
+                              effective_step=self.effective_step,
+                              batch_normalization=self.batch_normalization, dropout=self.dropout)
 
-        if self.UseEntireSeq:
+        if self.use_entire_seq:
             self.endFC = torch.nn.Linear(in_features=len(self.effective_step) * self.nb_lstm_units * int(
                 self.im_size[0] / ((self.conv_stride * self.pool_kernel_size[0]) ** self.lstm_layers)) * int(
                 self.im_size[1] / ((self.conv_stride * self.pool_kernel_size[0]) ** self.lstm_layers)),
@@ -62,15 +62,15 @@ class Model(torch.nn.Module):
                 self.im_size[1] / ((self.conv_stride * self.pool_kernel_size[0]) ** self.lstm_layers)),
                                          out_features=self.num_classes)
 
-        print("use entire sequence is: ", self.UseEntireSeq)
+        print("use entire sequence is: ", self.use_entire_seq)
         print("shape of FC is: ", self.endFC)
         self.sm = torch.nn.Softmax(dim=1)
 
     def forward(self, x):
 
-        output, hiddens = self.firstCLSTMLayer(x)
+        output, hiddens = self.clstm(x)
 
-        if self.UseEntireSeq:
+        if self.use_entire_seq:
             output = self.endFC(torch.stack(output).view(-1, len(self.effective_step) * self.nb_lstm_units * int(
                 self.im_size[0] / ((self.conv_stride * self.pool_kernel_size[0]) ** self.lstm_layers)) * int(
                 self.im_size[1] / ((self.conv_stride * self.pool_kernel_size[0]) ** self.lstm_layers))))
@@ -79,7 +79,7 @@ class Model(torch.nn.Module):
                 self.im_size[0] / ((self.conv_stride * self.pool_kernel_size[0]) ** self.lstm_layers)) * int(
                 self.im_size[1] / ((self.conv_stride * self.pool_kernel_size[0]) ** self.lstm_layers))))
 
-        if self.addSoftMax:
+        if self.add_softmax:
             output = self.sm(output)
 
         return output

@@ -1,25 +1,19 @@
-#import av
 import torch
 import numpy as np
 
 from data_parser import PicDatabase
-from data_augmentor import Augmentor
-import torchvision
-from transforms_video import *
-from utils import save_images_for_debug
 from PIL import Image
+
 
 class ImLoader(torch.utils.data.Dataset):
 
     def __init__(self, root, json_file_input="", json_file_labels="", clip_size=16,
                  is_val=False, get_item_id=False, is_test=False):
-        self.dataset_object = PicDatabase(root)#="/smth_smth/data_single/train/"
+
+        self.dataset_object = PicDatabase(root)
         self.path_data = self.dataset_object.input_data
         self.classes = self.dataset_object.classes
-
         self.root = root
-
-
         self.clip_size = clip_size
         self.nclips = 1
         self.step_size = 1

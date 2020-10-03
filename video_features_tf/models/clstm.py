@@ -3,14 +3,12 @@ from __future__ import division
 from __future__ import print_function
 
 import ast
-
 import tensorflow as tf
-
-FLAGS = tf.app.flags.FLAGS
 
 
 def clstm_block(input_tensor, nb_hidden, ks1, ks2, pooling,
-                batch_normalization, return_sequences):
+                batch_normalization, return_sequences,
+                config_dict):
     """
     x: input tensor
     nb_hidden: int
@@ -20,21 +18,26 @@ def clstm_block(input_tensor, nb_hidden, ks1, ks2, pooling,
     return_sequences: bool
     """
     # Kernel regularizer
-    reg = tf.keras.regularizers.l2(FLAGS.kernel_regularizer)
+    reg = tf.keras.regularizers.l2(config_dict['kernel_regularizer'])
     # ConvLSTM2D layer
-    clstm_output = tf.keras.layers.ConvLSTM2D(filters=nb_hidden,
-                                   kernel_size=(ks1,ks2),
-                                   padding=FLAGS.padding,
-                                   strides=(FLAGS.strides,FLAGS.strides),
-                                   kernel_regularizer=reg,
-                                   dropout=FLAGS.dropout_rate,
-                                   return_sequences=return_sequences)(input_tensor)
-    if return_sequences == True:
+    clstm_output = tf.keras.layers.ConvLSTM2D(
+        filters=nb_hidden,
+        kernel_size=(ks1, ks2),
+        padding=config_dict['padding_clstm'],
+        strides=(config_dict['stride_clstm'], config_dict['stride_clstm']),
+        kernel_regularizer=reg,
+        dropout=config_dict['dropout_clstm'],
+        return_sequences=return_sequences)(input_tensor)
+    if return_sequences:
         # Maxpooling layer per time slice
         if pooling == 'max':
-            x = tf.keras.layers.TimeDistributed(tf.keras.layers.MaxPooling2D())(inputs=clstm_output)
+            x = tf.keras.layers.TimeDistributed(
+                    tf.keras.layers.MaxPooling2D())(
+                        inputs=clstm_output)
         if pooling == 'avg':
-            x = tf.keras.layers.TimeDistributed(tf.keras.layers.AveragePooling2D())(inputs=clstm_output)
+            x = tf.keras.layers.TimeDistributed(
+                    tf.keras.layers.AveragePooling2D())(
+                        inputs=clstm_output)
     else:
         if pooling == 'max':
             x = tf.keras.layers.MaxPooling2D()(inputs=clstm_output)
@@ -48,10 +51,10 @@ def clstm_block(input_tensor, nb_hidden, ks1, ks2, pooling,
     return x, clstm_output
 
     
-def clstm_gap(x, bn, num_classes):
+def clstm_gap(x, bn, num_classes, config_dict):
 
-    layers = ast.literal_eval(FLAGS.layers)
-    rs = ast.literal_eval(FLAGS.return_sequences)
+    layers = config_dict['nb_lstm_layers'] * [config_dict['nb_lstm_units']]
+    rs = ast.literal_eval(config_dict['return_sequences'])
     nb_clstm_layers = len(layers)
     
     print(x)
@@ -59,9 +62,12 @@ def clstm_gap(x, bn, num_classes):
     for l in range(nb_clstm_layers):
         name_scope = 'block' + str(l + 1)
         with tf.name_scope(name_scope):
-            x = clstm_block(x, nb_hidden=layers[l], ks=FLAGS.kernel_size,
-                            pooling=True, batch_normalization=bn,
-                            return_sequences=rs[l])
+            x = clstm_block(
+                x, nb_hidden=layers[l],
+                ks=config_dict['kernel_size'],
+                pooling=True,
+                batch_normalization=bn,
+                return_sequences=rs[l])
 
     with tf.name_scope('gap'):
         x = tf.nn.avg_pool3d(x, ksize=[1,16,1,1,1],
@@ -78,13 +84,13 @@ def clstm_gap(x, bn, num_classes):
     return x
 
 
-def clstm(x, bn, num_classes):
+def clstm(x, bn, num_classes, config_dict):
     """x: 5D tensor, sequence of images
        bn: bool, whether to batch normalize
        return: x, the transformed input sequence."""
 
-    layers = ast.literal_eval(FLAGS.layers)
-    rs = ast.literal_eval(FLAGS.return_sequences)
+    layers = config_dict['nb_lstm_layers'] * [config_dict['nb_lstm_units']]
+    rs = ast.literal_eval(config_dict['return_sequences'])
     nb_clstm_layers = len(layers)
     
     print(x)
@@ -92,20 +98,21 @@ def clstm(x, bn, num_classes):
     for l in range(nb_clstm_layers):
         name_scope = 'block' + str(l + 1)
         with tf.name_scope(name_scope):
-            x, clstm_output = clstm_block(x, nb_hidden=layers[l],
-                            ks1=FLAGS.kernel_size_1,
-                            ks2=FLAGS.kernel_size_2,
-                            pooling=FLAGS.pooling_method, batch_normalization=bn,
-                            return_sequences=rs[l])
+            x, clstm_output = clstm_block(
+                x, nb_hidden=layers[l],
+                ks1=config_dict['kernel_size_1'],
+                ks2=config_dict['kernel_size_2'],
+                pooling=config_dict['pooling_method'],
+                batch_normalization=bn,
+                return_sequences=rs[l])
             print('x: ', x)
             print('clstm_output: ', clstm_output)
 
-
     with tf.name_scope('fully_con'):
-        if FLAGS.only_last_element_for_fc == 'yes':
+        if config_dict['only_last_element_for_fc'] == 'yes':
             # Only pass on the last element of the sequence to FC.
             # return_seq is True just to save it in the graph for gradcam.
-            x = tf.layers.flatten(x[:,-1,:,:,:])
+            x = tf.layers.flatten(x[:, -1, :, :, :])
         else:
             x = tf.layers.flatten(x)
         print(x)

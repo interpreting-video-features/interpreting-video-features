@@ -6,7 +6,7 @@ import argparse
 import torch
 import shutil
 import glob
-import numpy as np
+import importlib
 
 
 def load_args():
@@ -110,6 +110,16 @@ def load_json_config(path):
         config = json.load(data_file)
         config = config_init(config)
     return config
+
+
+def load_module(module_path_and_name):
+    # if contained in module it would be a oneliner:
+    # config_dict_module = importlib.import_module(dict_module_name)
+    module_child_name = module_path_and_name.split('/')[-1].replace('.py', '')
+    spec = importlib.util.spec_from_file_location(module_child_name, module_path_and_name)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
 
 
 def config_init(config):
@@ -225,3 +235,22 @@ class ExperimentalRunCleaner(object):
             shutil.rmtree(self.save_dir)
         print('You pressed Ctrl+C!')
         sys.exit(0)
+
+
+# Taken from PyTorch's examples.imagenet.main
+class AverageMeter(object):
+    """Computes and stores the average and current value"""
+    def __init__(self):
+        self.reset()
+
+    def reset(self):
+        self.val = 0
+        self.avg = 0
+        self.sum = 0
+        self.count = 0
+
+    def update(self, val, n=1):
+        self.val = val
+        self.sum += val * n
+        self.count += n
+        self.avg = self.sum / self.count

@@ -8,7 +8,7 @@ from torch.autograd import Variable
 
 
 class ConvLSTMCell(nn.Module):
-    def __init__(self, input_channels, hidden_channels, kernel_size, conv_stride):
+    def __init__(self, input_channels, hidden_channels, kernel_size, conv_stride, device):
         super(ConvLSTMCell, self).__init__()
 
         assert hidden_channels % 2 == 0
@@ -18,6 +18,7 @@ class ConvLSTMCell(nn.Module):
         self.kernel_size = kernel_size
         self.num_features = 4
         self.conv_stride = conv_stride
+        self.device = device
 
         self.padding = int((kernel_size - 1) / 2)
 
@@ -48,21 +49,23 @@ class ConvLSTMCell(nn.Module):
 
     def init_hidden(self, batch_size, hidden, shape):
         if self.Wci is None:
-            self.Wci = Variable(torch.zeros(1, hidden, shape[0]//self.conv_stride, shape[1]//self.conv_stride)).cuda()
-            self.Wcf = Variable(torch.zeros(1, hidden, shape[0]//self.conv_stride, shape[1]//self.conv_stride)).cuda()
-            self.Wco = Variable(torch.zeros(1, hidden, shape[0]//self.conv_stride, shape[1]//self.conv_stride)).cuda()
+            self.Wci = Variable(torch.zeros(1, hidden, shape[0]//self.conv_stride, shape[1]//self.conv_stride)).to(self.device)
+            self.Wcf = Variable(torch.zeros(1, hidden, shape[0]//self.conv_stride, shape[1]//self.conv_stride)).to(self.device)
+            self.Wco = Variable(torch.zeros(1, hidden, shape[0]//self.conv_stride, shape[1]//self.conv_stride)).to(self.device)
         else:
             assert shape[0]//self.conv_stride == self.Wci.size()[2], 'Input Height Mismatched! %d vs %d' %(shape[0]//self.conv_stride, self.Wci.size()[2])
             assert shape[1]//self.conv_stride == self.Wci.size()[3], 'Input Width Mismatched!'
         #print("returning init h of size ", batch_size, hidden, shape[0], shape[1])
-        return (Variable(torch.zeros(batch_size, hidden, shape[0]//self.conv_stride, shape[1]//self.conv_stride)).cuda(),
-                Variable(torch.zeros(batch_size, hidden, shape[0]//self.conv_stride, shape[1]//self.conv_stride)).cuda())
+        return (Variable(torch.zeros(batch_size, hidden, shape[0]//self.conv_stride, shape[1]//self.conv_stride)).to(self.device),
+                Variable(torch.zeros(batch_size, hidden, shape[0]//self.conv_stride, shape[1]//self.conv_stride)).to(self.device))
 
 
 class ConvLSTM(nn.Module):
     # input_channels corresponds to the first input feature map
     # hidden state is a list of succeeding lstm layers.
-    def __init__(self, input_channels, hidden_channels, kernel_size, conv_stride, pool_kernel_size=(2,2), step=1, effective_step=[1], batch_normalization=True, dropout=0):
+    def __init__(self, input_channels, hidden_channels, kernel_size, conv_stride,
+                 pool_kernel_size=(2,2), step=1, effective_step=[1],
+                 batch_normalization=True, dropout=0, device='cpu'):
         super(ConvLSTM, self).__init__()
         self.input_channels = [input_channels] + hidden_channels
         self.hidden_channels = hidden_channels
@@ -76,6 +79,7 @@ class ConvLSTM(nn.Module):
         self.mp = nn.MaxPool2d(kernel_size=self.pool_kernel_size)
         self.batch_norm = batch_normalization
         self.dropout_rate=dropout
+        self.device = device
         #to be pool_size=2, strides=None, padding='valid', data_format='channels_last')
         #kernel_size, stride=None, padding=0, dilation=1, return_indices=False, ceil_mode=False)
         self.bn = nn.BatchNorm2d(self.hidden_channels[0], eps=1e-05, momentum=0.1, affine=True) #should prolly be several, and in loop with cell{] thing
@@ -83,7 +87,7 @@ class ConvLSTM(nn.Module):
         self.dropout = torch.nn.Dropout(p=self.dropout_rate)
         for i in range(self.num_layers):
             name = 'cell{}'.format(i)
-            cell = ConvLSTMCell(self.input_channels[i], self.hidden_channels[i], self.kernel_size, self.conv_stride)
+            cell = ConvLSTMCell(self.input_channels[i], self.hidden_channels[i], self.kernel_size, self.conv_stride, self.device)
             setattr(self, name, cell)
             #should add BN here (and max pooling)
             
@@ -130,12 +134,13 @@ class ConvLSTM(nn.Module):
 
 if __name__ == '__main__':
     # gradient check
+    device = 'cpu'
     convlstm = ConvLSTM(input_channels=512, hidden_channels=[128, 64, 64, 32, 32], kernel_size=3, step=5,
-                        effective_step=[4]).cuda()
+                        effective_step=[4]).to(device)
     loss_fn = torch.nn.MSELoss()
 
-    input = Variable(torch.randn(1, 512, 64, 32)).cuda()
-    target = Variable(torch.randn(1, 32, 64, 32)).double().cuda()
+    input = Variable(torch.randn(1, 512, 64, 32)).to(device)
+    target = Variable(torch.randn(1, 32, 64, 32)).double().to(device)
 
     output = convlstm(input)
     output = output[0][0].double()

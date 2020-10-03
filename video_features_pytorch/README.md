@@ -1,5 +1,5 @@
 ## Dependencies
-There is a conda environment file, env.yml that can be used to install the necessary environment
+There is a conda environment file in `../envs/env.yml`, that can be used to install the necessary environment
 
 ## Training
 To start training the I3D model, first ensure that the config file in configs/config_i3D_smth.json is correctly updated, as well as the KTH version if required.

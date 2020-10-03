@@ -12,73 +12,24 @@ import torch
 import torch.nn as nn
 import numpy as np
 
-from utils import *
-from callbacks import (PlotLearning, AverageMeter)
-from models.multi_column import MultiColumn
-import torchvision
-from transforms_video import *
+import utils
+from visualisation import PlotLearning
 
 # load configurations
-args = load_args()
-config = load_json_config(args.config)
-
-hyper_params = {
-    "clip_size": config["clip_size"],
-    "batch_size": config["batch_size"],
-    "num_workers": config["num_workers"],
-    "optimizer": config["optimizer"],
-    "weight_decay": config["weight_decay"],
-    "lr": config["lr"],
-    "last_lr": config["last_lr"],
-    "momentum": config["momentum"],
-    "input_spatial_size": config["input_spatial_size"],
-    "column_units": config["column_units"],
-    "num_classes": config["num_classes"],
-    "shuffle":1,
-    "soft_max":0,
-    "last_relu":None,
-    "last_stride":1
-}
-
-if(not args.batch_size==None):
-    hyper_params["batch_size"] = args.batch_size
-if(not args.learning_rate==None):
-    hyper_params["lr"] = args.learning_rate
-if(not args.weight_decay==None):
-    hyper_params["weight_decay"] = args.weight_decay
-if(not args.optimizer==None):
-    hyper_params["optimizer"] = args.optimizer
-if(not args.shuffle==None):
-    hyper_params["shuffle"] = args.shuffle
-if(not args.last_stride==None):
-    hyper_params["last_stride"] = args.last_stride
-if(not args.soft_max==None):
-    hyper_params["soft_max"] = args.soft_max
-if(not args.last_relu==None):
-    hyper_params["last_relu"] = args.last_relu
-if(not args.dropout==None):
-    hyper_params["dropout"] = args.dropout
-if(not args.final_temp_time==None):
-    hyper_params["final_temp_time"] = args.final_temp_time
-
-hyper_params["mod_stride_layers"] = args.mod_stride_layers
+args = utils.load_args()
+config = utils.load_module(args.config).config
 
 # set column model
-file_name = config['conv_model']
-cnn_def = importlib.import_module("{}".format(file_name))
+cnn_def = importlib.import_module('{}'.format(config['conv_model']))
 
 # setup device - CPU or GPU
-device, device_ids = setup_cuda_devices(args)
+device, device_ids = utils.setup_cuda_devices(args)
 print(" > Using device: {}".format(device.type))
 print(" > Active GPU ids: {}".format(device_ids))
 
 best_loss = float('Inf')
 
-if config["input_mode"] == "av":
-    from data_loader_av import VideoFolder
-elif config["input_mode"] == "skvideo":
-    from data_loader_skvideo import VideoFolder
-elif config["input_mode"] == "jpg":
+if config["input_mode"] == "jpg":
     from data_loader_kth import KTHImLoader
 else:
     raise ValueError("Please provide a valid input mode")
@@ -98,43 +49,48 @@ def main():
         os.makedirs(os.path.join(save_dir, 'plots'))
 
     # assign Ctrl+C signal handler
-    signal.signal(signal.SIGINT, ExperimentalRunCleaner(save_dir))
+    signal.signal(signal.SIGINT, utils.ExperimentalRunCleaner(save_dir))
 
     # create model
     print(" > Creating model ... !")
-    model = cnn_def.Model(config['num_classes'],last_stride=hyper_params["last_stride"],stride_mod_layers = hyper_params["mod_stride_layers"], finalTimeLength=hyper_params["final_temp_time"], dropout_keep_prob=hyper_params["dropout"], softMax=hyper_params["soft_max"], lastRelu=hyper_params["last_relu"])
+    model = cnn_def.Model(config['num_classes'],
+                          last_stride=config["last_stride"],
+                          stride_mod_layers=config["stride_mod_layers"],
+                          finalTimeLength=config["final_temp_time"],
+                          dropout_keep_prob=config["dropout"],
+                          softMax=config["soft_max"],
+                          lastRelu=config["last_relu"])
 
     # multi GPU setting
     model = torch.nn.DataParallel(model, device_ids).to(device)
 
     # optionally resume from a checkpoint
     checkpoint_path = config['pretrained_model_path']
-    
-    
+
     if args.resume:
         if os.path.isfile(checkpoint_path):
             print(" > Loading checkpoint '{}'".format(args.resume))
             checkpoint = torch.load(checkpoint_path)
             init_dict = model.module.state_dict()
 
-            pretrained_dict={}
-            
+            pretrained_dict = {}
+
             try:
                 args.start_epoch = checkpoint['epoch']
             except:
                 args.start_epoch = 0
-                
+
             try:
                 best_loss = checkpoint['best_loss']
             except:
                 best_loss = 100
-                
-            for k,v in checkpoint.items():
-                if(k!="logits.conv3d.weight" and k!="logits.conv3d.bias"):
-                    pretrained_dict[k]=v
+
+            for k, v in checkpoint.items():
+                if k != "logits.conv3d.weight" and k != "logits.conv3d.bias":
+                    pretrained_dict[k] = v
                 else:
                     print("blocked class layer!")
-            
+
             init_dict.update(pretrained_dict)
             model.module.load_state_dict(init_dict)
             print(" > Loaded checkpoint '{}'"
@@ -143,53 +99,52 @@ def main():
             print(" !#! No checkpoint found at '{}'".format(
                 checkpoint_path))
 
-
-    train_data = KTHImLoader(config['data_folder']"/train", clip_size=32)
+    train_data = KTHImLoader(config['data_folder'] + 'train', clip_size=32)
     train_loader = torch.utils.data.DataLoader(
-            train_data,
-            batch_size=hyper_params['batch_size'], shuffle=hyper_params["shuffle"],
-            num_workers=hyper_params['num_workers'], pin_memory=True,
-            drop_last=True)
+        train_data,
+        batch_size=config['batch_size'], shuffle=config["shuffle"],
+        num_workers=config['num_workers'], pin_memory=True,
+        drop_last=True)
 
-    val_data = KTHImLoader(config['data_folder']+"/validation", clip_size=32)
+    val_data = KTHImLoader(config['data_folder'] + 'test', clip_size=32)
     val_loader = torch.utils.data.DataLoader(
-            val_data,
-            batch_size=hyper_params['batch_size'], shuffle=hyper_params["shuffle"],
-            num_workers=hyper_params['num_workers'], pin_memory=True,
-            drop_last=True)
+        val_data,
+        batch_size=config['batch_size'], shuffle=config["shuffle"],
+        num_workers=config['num_workers'], pin_memory=True,
+        drop_last=True)
 
-    test_data = KTHImLoader(config['data_folder']"/test", clip_size=32)
+    test_data = KTHImLoader(config['data_folder'] + 'test', clip_size=32)
     test_loader = torch.utils.data.DataLoader(
-            test_data,
-            batch_size=hyper_params['batch_size'], shuffle=False,
-            num_workers=hyper_params['num_workers'], pin_memory=True,
-            drop_last=True)
-    
+        test_data,
+        batch_size=config['batch_size'], shuffle=False,
+        num_workers=config['num_workers'], pin_memory=True,
+        drop_last=True)
+
     # define loss function (criterion)
-    if(hyper_params["soft_max"]):
+    if config["soft_max"]:
         criterion = nn.NLLLoss().to(device)
     else:
         criterion = nn.CrossEntropyLoss().to(device)
 
     # define optimizer
-    lr = hyper_params["lr"]
-    last_lr = hyper_params["last_lr"]
-    momentum = hyper_params['momentum']
-    weight_decay = hyper_params['weight_decay']
-    
-    if(hyper_params["optimizer"]=="SGD"):
-        optimizer = torch.optim.SGD(model.parameters(), lr=hyper_params["lr"],
-                                momentum=hyper_params['momentum'],
-                                weight_decay=hyper_params['weight_decay'])
-    elif(hyper_params["optimizer"]=="ADAM"):
-        optimizer = torch.optim.Adam(model.parameters(), lr=hyper_params["lr"],
-                                weight_decay=hyper_params['weight_decay'])
+    lr = config["lr"]
+    last_lr = config["last_lr"]
+    momentum = config['momentum']
+    weight_decay = config['weight_decay']
+
+    if config["optimizer"] == "SGD":
+        optimizer = torch.optim.SGD(model.parameters(), lr=config["lr"],
+                                    momentum=config['momentum'],
+                                    weight_decay=config['weight_decay'])
+    elif config["optimizer"] == "ADAM":
+        optimizer = torch.optim.Adam(model.parameters(), lr=config["lr"],
+                                     weight_decay=config['weight_decay'])
 
     # set callbacks
     plotter = PlotLearning(os.path.join(
-        save_dir, "plots"), hyper_params["num_classes"])
+        save_dir, "plots"), config["num_classes"])
     lr_decayer = torch.optim.lr_scheduler.ReduceLROnPlateau(
-                        optimizer, 'min', factor=0.5, patience=2, verbose=True)
+        optimizer, 'min', factor=0.5, patience=2, verbose=True)
     val_loss = float('Inf')
 
     # set end condition by num epochs
@@ -233,7 +188,7 @@ def main():
         # remember best loss and save the checkpoint
         is_best = val_loss < best_loss
         best_loss = min(val_loss, best_loss)
-        save_checkpoint({
+        utils.save_checkpoint({
             'epoch': epoch + 1,
             'arch': "Conv4Col",
             'state_dict': model.state_dict(),
@@ -242,24 +197,24 @@ def main():
 
 
 def train(train_loader, model, criterion, optimizer, epoch):
-    batch_time = AverageMeter()
-    data_time = AverageMeter()
-    losses = AverageMeter()
-    top1 = AverageMeter()
-    top5 = AverageMeter()
+    batch_time = utils.AverageMeter()
+    data_time = utils.AverageMeter()
+    losses = utils.AverageMeter()
+    top1 = utils.AverageMeter()
+    top5 = utils.AverageMeter()
 
     # switch to train mode
     model.train()
 
     end = time.time()
     for i, (input, target) in enumerate(train_loader):
-        #if(i==10):
+        # if(i==10):
         #    break
         # measure data loading time
         data_time.update(time.time() - end)
 
         if config['nclips_train'] > 1:
-            input_var = list(input.split(hyper_params['clip_size'], 2))
+            input_var = list(input.split(config['clip_size'], 2))
             for idx, inp in enumerate(input_var):
                 input_var[idx] = inp.to(device)
         else:
@@ -271,12 +226,14 @@ def train(train_loader, model, criterion, optimizer, epoch):
 
         # compute output and loss
         output = model(input_var)
-        #print("output shape:", output.shape)
-        #print("target shaep:", target.shape)
+        # print("output shape:", output.shape)
+        # print("target shaep:", target.shape)
         loss = criterion(output, target)
 
         # measure accuracy and record loss
-        prec1, prec5 = accuracy(output.detach().cpu(), target.detach().cpu(), topk=(1, 5))
+        prec1, prec5 = utils.accuracy(output.detach().cpu(),
+                                      target.detach().cpu(),
+                                      topk=(1, 5))
         losses.update(loss.item(), input.size(0))
         top1.update(prec1.item(), input.size(0))
         top5.update(prec5.item(), input.size(0))
@@ -289,8 +246,6 @@ def train(train_loader, model, criterion, optimizer, epoch):
         # measure elapsed time
         batch_time.update(time.time() - end)
         end = time.time()
-        
-
 
         if i % config["print_freq"] == 0:
             print('Epoch: [{0}][{1}/{2}]\t'
@@ -299,16 +254,16 @@ def train(train_loader, model, criterion, optimizer, epoch):
                   'Loss {loss.val:.4f} ({loss.avg:.4f})\t'
                   'Prec@1 {top1.val:.3f} ({top1.avg:.3f})\t'
                   'Prec@5 {top5.val:.3f} ({top5.avg:.3f})'.format(
-                      epoch, i, len(train_loader), batch_time=batch_time,
-                      data_time=data_time, loss=losses, top1=top1, top5=top5))
+                epoch, i, len(train_loader), batch_time=batch_time,
+                data_time=data_time, loss=losses, top1=top1, top5=top5))
     return losses.avg, top1.avg, top5.avg
 
 
 def validate(val_loader, model, criterion, class_to_idx=None):
-    batch_time = AverageMeter()
-    losses = AverageMeter()
-    top1 = AverageMeter()
-    top5 = AverageMeter()
+    batch_time = utils.AverageMeter()
+    losses = utils.AverageMeter()
+    top1 = utils.AverageMeter()
+    top5 = utils.AverageMeter()
 
     # switch to evaluate mode
     model.eval()
@@ -323,7 +278,7 @@ def validate(val_loader, model, criterion, class_to_idx=None):
         for i, (input, target) in enumerate(val_loader):
 
             if config['nclips_val'] > 1:
-                input_var = list(input.split(hyper_params['clip_size'], 2))
+                input_var = list(input.split(config['clip_size'], 2))
                 for idx, inp in enumerate(input_var):
                     input_var[idx] = inp.to(device)
             else:
@@ -337,12 +292,14 @@ def validate(val_loader, model, criterion, class_to_idx=None):
 
             if args.eval_only:
                 logits_matrix.append(output.cpu().data.numpy())
-                #features_matrix.append(features.cpu().data.numpy())
+                # features_matrix.append(features.cpu().data.numpy())
                 targets_list.append(target.cpu().numpy())
-                #item_id_list.append(item_id)
+                # item_id_list.append(item_id)
 
             # measure accuracy and record loss
-            prec1, prec5 = accuracy(output.detach().cpu(), target.detach().cpu(), topk=(1, 5))
+            prec1, prec5 = utils.accuracy(output.detach().cpu(),
+                                          target.detach().cpu(),
+                                          topk=(1, 5))
             losses.update(loss.item(), input.size(0))
             top1.update(prec1.item(), input.size(0))
             top5.update(prec5.item(), input.size(0))
@@ -357,8 +314,8 @@ def validate(val_loader, model, criterion, class_to_idx=None):
                       'Loss {loss.val:.4f} ({loss.avg:.4f})\t'
                       'Prec@1 {top1.val:.3f} ({top1.avg:.3f})\t'
                       'Prec@5 {top5.val:.3f} ({top5.avg:.3f})'.format(
-                          i, len(val_loader), batch_time=batch_time, loss=losses,
-                          top1=top1, top5=top5))
+                    i, len(val_loader), batch_time=batch_time, loss=losses,
+                    top1=top1, top5=top5))
 
     print(' * Prec@1 {top1.avg:.3f} Prec@5 {top5.avg:.3f}'
           .format(top1=top1, top5=top5))

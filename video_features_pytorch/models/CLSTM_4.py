@@ -29,11 +29,11 @@ class Model(torch.nn.Module):
         self.effective_step = effective_step
         self.add_softmax = add_softmax
         self.use_entire_seq = use_entire_seq
-        self.build()
-
         self.clstm = None
         self.endFC = None
         self.sm = None
+
+        self.build()
 
     def build(self):
         """
